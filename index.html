@@ -23,6 +23,7 @@
     <input type="text" id="name" placeholder="Ваше имя">
     <input type="email" id="email" placeholder="Ваш Email">
     <button id="mainBtn">Отправить в облако</button>
+    <button class="like-btn" style="width: 100%; margin-top: 10px; justify-content: center;" onclick="clearInputs()">🧹 Очистить поля формы</button>
 </div>
 
 <div id="feed" style="width: 100%; max-width: 500px;"></div>
@@ -64,10 +65,6 @@ window.processLike = async (id) => {
     };
 
  
-    window.clearInputs = () => {
-        document.getElementById('name').value = "";
-        document.getElementById('email').value = "";
-    };
 
     
     document.getElementById('mainBtn').onclick = async () => {
@@ -101,14 +98,15 @@ window.processLike = async (id) => {
         snapshot.forEach((doc) => {
             const data = doc.data();
             const time = data.timestamp ? data.timestamp.toDate().toLocaleTimeString() : "...";
-           feed.innerHTML += `
+          feed.innerHTML += `
     <div class="post">
         <span class="time">${time}</span>
         <b>${data.name}</b>
         <p>${data.email}</p>
-        <button class="like-btn" onclick="processLike('${doc.id}')">👍 ${data.likes || 0}</button>
-        <button class="like-btn" style="color:red" onclick="removePost('${doc.id}')">🗑 Удалить</button>
-        <button class="like-btn" onclick="clearInputs()">🧹 Очистить</button>
+        <div style="display: flex; gap: 10px;">
+            <button class="like-btn" onclick="processLike('${doc.id}')">👍 ${data.likes || 0}</button>
+            <button class="like-btn delete-style" onclick="removePost('${doc.id}')">🗑 Удалить</button>
+        </div>
     </div>
 `;
         });
