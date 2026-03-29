@@ -14,6 +14,8 @@
         .like-btn { cursor: pointer; border: none; background: #f8f9fa; padding: 5px 12px; border-radius: 20px; font-size: 14px; transition: 0.2s; margin-top: 10px; }
         .like-btn:hover { background: #e2e6ea; }
         .time { font-size: 11px; color: #999; float: right; }
+        .delete-style { color: #dc3545; background: #fff0f0; }
+.delete-style:hover { background: #ffdada; }
     </style>
 </head>
 <body>
@@ -106,6 +108,10 @@ window.processLike = async (id) => {
         <div style="display: flex; gap: 10px;">
             <button class="like-btn" onclick="processLike('${doc.id}')">👍 ${data.likes || 0}</button>
             <button class="like-btn delete-style" onclick="removePost('${doc.id}')">🗑 Удалить</button>
+            window.clearInputs = () => {
+    document.getElementById('name').value = "";
+    document.getElementById('email').value = "";
+};
         </div>
     </div>
 `;
