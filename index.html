@@ -86,7 +86,6 @@
         serverTimestamp, updateDoc, doc, increment 
     } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 
-    // Конфигурация вашего Firebase
     const firebaseConfig = { 
         apiKey: "AIzaSyB-8dlbw4l69np4yIapFr0OXJi8VbH32_U",
         authDomain: "index-48da6.firebaseapp.com",
@@ -99,7 +98,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // Функция для лайков (вынесена в window для доступа из HTML)
     window.processLike = async (id) => {
         const docRef = doc(db, "requests", id);
         try {
@@ -109,7 +107,6 @@
         }
     };
 
-    // Отправка данных
     document.getElementById('mainBtn').onclick = async () => {
         const btn = document.getElementById('mainBtn');
         const nameInput = document.getElementById('name');
