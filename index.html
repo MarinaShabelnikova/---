@@ -20,7 +20,17 @@
             padding: 25px; 
             border-radius: 12px; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+            margin-bottom: 20px;
         }
+        /* Блок профиля */
+        .auth-bar {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        .user-photo { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #007bff; }
+        
         input { 
             width: 100%; 
             padding: 12px; 
@@ -29,7 +39,7 @@
             border-radius: 6px; 
             box-sizing: border-box; 
         }
-        button#mainBtn { 
+        button { 
             background: #007bff; 
             color: white; 
             border: none; 
@@ -40,9 +50,11 @@
             cursor: pointer; 
             transition: 0.3s; 
         }
-        button#mainBtn:hover { background: #0056b3; }
-        button#mainBtn:disabled { background: #ccc; }
-        
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; }
+        .logout-btn { background: #ff4757; width: auto; padding: 8px 15px; font-size: 14px; }
+        .logout-btn:hover { background: #c0392b; }
+
         .post { 
             background: #fff; 
             border: 1px solid #eaeaea; 
@@ -70,10 +82,20 @@
 </head>
 <body>
 
-<div class="container">
+<div id="authSection" class="container" style="text-align: center;">
+    <button id="loginBtn">Войти через Google</button>
+    <div id="userInfo" style="display: none;" class="auth-bar">
+        <img id="userPhoto" class="user-photo" src="" alt="User">
+        <span id="userName" style="font-weight: bold;"></span>
+        <button id="logoutBtn" class="logout-btn">Выйти</button>
+    </div>
+</div>
+
+<div id="messageForm" class="container" style="display: none;">
     <h3>Отправить заявку</h3>
-    <input type="text" id="name" placeholder="Ваше имя">
-    <input type="email" id="email" placeholder="Ваш Email">
+    <input type="text" id="name" placeholder="Ваше имя" readonly>
+    <input type="email" id="email" placeholder="Ваш Email" readonly>
+    <input type="text" id="message" placeholder="Ваше сообщение">
     <button id="mainBtn">Отправить в облако</button>
 </div>
 
@@ -85,6 +107,9 @@
         getFirestore, collection, addDoc, query, orderBy, onSnapshot, 
         serverTimestamp, updateDoc, doc, increment 
     } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+    import { 
+        getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
 
     const firebaseConfig = { 
         apiKey: "AIzaSyB-8dlbw4l69np4yIapFr0OXJi8VbH32_U",
@@ -97,8 +122,39 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
 
+    // Элементы интерфейса
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const userInfo = document.getElementById('userInfo');
+    const messageForm = document.getElementById('messageForm');
+
+    // Логика авторизации
+    loginBtn.onclick = () => signInWithPopup(auth, provider);
+    logoutBtn.onclick = () => signOut(auth);
+
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            loginBtn.style.display = 'none';
+            userInfo.style.display = 'flex';
+            messageForm.style.display = 'block';
+
+            document.getElementById('userName').innerText = user.displayName;
+            document.getElementById('userPhoto').src = user.photoURL;
+            document.getElementById('name').value = user.displayName;
+            document.getElementById('email').value = user.email;
+        } else {
+            loginBtn.style.display = 'block';
+            userInfo.style.display = 'none';
+            messageForm.style.display = 'none';
+        }
+    });
+
+    // Обработка лайков
     window.processLike = async (id) => {
+        if (!auth.currentUser) return alert("Войдите, чтобы ставить лайки!");
         const docRef = doc(db, "requests", id);
         try {
             await updateDoc(docRef, { likes: increment(1) });
@@ -107,30 +163,31 @@
         }
     };
 
+    // Отправка данных
     document.getElementById('mainBtn').onclick = async () => {
+        const msgInput = document.getElementById('message');
+        if(!msgInput.value) return alert("Введите сообщение!");
+
         const btn = document.getElementById('mainBtn');
-        const nameInput = document.getElementById('name');
-        const emailInput = document.getElementById('email');
-
-        if(!nameInput.value || !emailInput.value) return alert("Заполните поля!");
-
         btn.disabled = true;
+        
         try {
             await addDoc(collection(db, "requests"), {
-                name: nameInput.value,
-                email: emailInput.value,
+                name: auth.currentUser.displayName,
+                email: auth.currentUser.email,
+                text: msgInput.value,
+                photo: auth.currentUser.photoURL,
                 likes: 0,
                 timestamp: serverTimestamp()
             });
-            nameInput.value = "";
-            emailInput.value = "";
+            msgInput.value = "";
         } catch (e) {
-            console.error(e);
-            alert("Ошибка безопасности: Данные отклонены сервером.");
+            alert("Ошибка: доступ запрещен правилами Firebase.");
         }
         btn.disabled = false;
     };
 
+    // Отображение ленты
     const q = query(collection(db, "requests"), orderBy("timestamp", "desc"));
     onSnapshot(q, (snapshot) => {
         const feed = document.getElementById('feed');
@@ -141,8 +198,11 @@
             feed.innerHTML += `
                 <div class="post">
                     <span class="time">${time}</span>
-                    <b>${data.name}</b>
-                    <p style="margin: 5px 0;">${data.email}</p>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <img src="${data.photo || ''}" style="width: 24px; border-radius: 50%;">
+                        <b>${data.name}</b>
+                    </div>
+                    <p style="margin: 10px 0;">${data.text || data.email}</p>
                     <button class="like-btn" onclick="processLike('${doc.id}')">👍 ${data.likes || 0}</button>
                 </div>
             `;
