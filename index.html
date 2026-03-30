@@ -2,20 +2,70 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Мой облачный проект</title>
     <style>
-        body { font-family: 'Inter', sans-serif; background: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .container { width: 100%; max-width: 500px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-        button#mainBtn { background: #007bff; color: white; border: none; padding: 12px; border-radius: 6px; width: 100%; font-weight: 600; cursor: pointer; transition: 0.3s; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: #f4f7f6; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            padding: 20px; 
+        }
+        .container { 
+            width: 100%; 
+            max-width: 500px; 
+            background: white; 
+            padding: 25px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+        }
+        input { 
+            width: 100%; 
+            padding: 12px; 
+            margin: 8px 0; 
+            border: 1px solid #ddd; 
+            border-radius: 6px; 
+            box-sizing: border-box; 
+        }
+        button#mainBtn { 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            padding: 12px; 
+            border-radius: 6px; 
+            width: 100%; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: 0.3s; 
+        }
         button#mainBtn:hover { background: #0056b3; }
         button#mainBtn:disabled { background: #ccc; }
-        .post { background: #fff; border: 1px solid #eaeaea; padding: 15px; margin-top: 15px; border-radius: 8px; width: 100%; max-width: 500px; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .like-btn { cursor: pointer; border: none; background: #f8f9fa; padding: 5px 12px; border-radius: 20px; font-size: 14px; transition: 0.2s; margin-top: 10px; }
+        
+        .post { 
+            background: #fff; 
+            border: 1px solid #eaeaea; 
+            padding: 15px; 
+            margin-top: 15px; 
+            border-radius: 8px; 
+            width: 100%; 
+            max-width: 500px; 
+            position: relative; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
+        }
+        .like-btn { 
+            cursor: pointer; 
+            border: none; 
+            background: #f8f9fa; 
+            padding: 5px 12px; 
+            border-radius: 20px; 
+            font-size: 14px; 
+            transition: 0.2s; 
+            margin-top: 10px; 
+        }
         .like-btn:hover { background: #e2e6ea; }
         .time { font-size: 11px; color: #999; float: right; }
-        .delete-style { color: #dc3545; background: #fff0f0; }
-.delete-style:hover { background: #ffdada; }
     </style>
 </head>
 <body>
@@ -25,7 +75,6 @@
     <input type="text" id="name" placeholder="Ваше имя">
     <input type="email" id="email" placeholder="Ваш Email">
     <button id="mainBtn">Отправить в облако</button>
-    <button class="like-btn" style="width: 100%; margin-top: 10px; justify-content: center;" onclick="clearInputs()">🧹 Очистить поля формы</button>
 </div>
 
 <div id="feed" style="width: 100%; max-width: 500px;"></div>
@@ -33,10 +82,11 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { 
-    getFirestore, collection, addDoc, query, orderBy, onSnapshot, 
-    serverTimestamp, updateDoc, doc, increment, deleteDoc
-} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+        getFirestore, collection, addDoc, query, orderBy, onSnapshot, 
+        serverTimestamp, updateDoc, doc, increment 
+    } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 
+    // Конфигурация вашего Firebase
     const firebaseConfig = { 
         apiKey: "AIzaSyB-8dlbw4l69np4yIapFr0OXJi8VbH32_U",
         authDomain: "index-48da6.firebaseapp.com",
@@ -49,29 +99,17 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-  
-window.processLike = async (id) => {
+    // Функция для лайков (вынесена в window для доступа из HTML)
+    window.processLike = async (id) => {
         const docRef = doc(db, "requests", id);
         try {
             await updateDoc(docRef, { likes: increment(1) });
         } catch (e) {
             console.error("Ошибка обновления:", e.message);
         }
-    }; 
-
- window.removePost = async (id) => { 
-        if(confirm("Вы уверены?")) {
-            await deleteDoc(doc(db, "requests", id));
-        }
     };
 
-    window.clearInputs = () => {
-        document.getElementById('name').value = "";
-        document.getElementById('email').value = "";
-    };
- 
-
-    
+    // Отправка данных
     document.getElementById('mainBtn').onclick = async () => {
         const btn = document.getElementById('mainBtn');
         const nameInput = document.getElementById('name');
@@ -90,11 +128,11 @@ window.processLike = async (id) => {
             nameInput.value = "";
             emailInput.value = "";
         } catch (e) {
+            console.error(e);
             alert("Ошибка безопасности: Данные отклонены сервером.");
         }
         btn.disabled = false;
     };
-
 
     const q = query(collection(db, "requests"), orderBy("timestamp", "desc"));
     onSnapshot(q, (snapshot) => {
@@ -103,19 +141,17 @@ window.processLike = async (id) => {
         snapshot.forEach((doc) => {
             const data = doc.data();
             const time = data.timestamp ? data.timestamp.toDate().toLocaleTimeString() : "...";
-         feed.innerHTML += `
+            feed.innerHTML += `
                 <div class="post">
                     <span class="time">${time}</span>
                     <b>${data.name}</b>
-                    <p>${data.email}</p>
-                    <div style="display: flex; gap: 10px;">
-                        <button class="like-btn" onclick="processLike('${doc.id}')">👍 ${data.likes || 0}</button>
-                        <button class="like-btn delete-style" onclick="removePost('${doc.id}')">🗑 Удалить</button>
-                    </div>
+                    <p style="margin: 5px 0;">${data.email}</p>
+                    <button class="like-btn" onclick="processLike('${doc.id}')">👍 ${data.likes || 0}</button>
                 </div>
             `;
         });
     });
 </script>
+
 </body>
 </html>
