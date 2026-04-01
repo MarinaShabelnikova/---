@@ -212,3 +212,161 @@
 
 </body>
 </html>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Личные сообщения (DM)</title>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { width: 100%; max-width: 500px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .auth-bar { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; }
+        .user-photo { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #007bff; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; padding: 12px; border-radius: 6px; width: 100%; font-weight: 600; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; }
+        .logout-btn { background: #ff4757; width: auto; padding: 8px 15px; font-size: 14px; }
+        
+        /* Стили для пузырьков сообщений */
+        .post { padding: 15px; margin-top: 15px; border-radius: 12px; width: 100%; max-width: 500px; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .sent { background: #e3f2fd; border: 1px solid #bbdefb; align-self: flex-end; }
+        .received { background: #ffffff; border: 1px solid #eaeaea; align-self: flex-start; }
+        
+        .time { font-size: 11px; color: #999; float: right; }
+        .dm-label { font-size: 10px; color: #007bff; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; display: block; }
+    </style>
+</head>
+<body>
+
+<div id="authSection" class="container" style="text-align: center;">
+    <button id="loginBtn">Войти через Google</button>
+    <div id="userInfo" style="display: none;" class="auth-bar">
+        <img id="userPhoto" class="user-photo" src="" alt="User">
+        <span id="userName" style="font-weight: bold;"></span>
+        <button id="logoutBtn" class="logout-btn">Выйти</button>
+    </div>
+</div>
+
+<div id="messageForm" class="container" style="display: none;">
+    <h3>Написать сообщение (DM)</h3>
+    <input type="email" id="receiverEmail" placeholder="Email получателя (кому пишем?)">
+    <input type="text" id="message" placeholder="Ваше секретное сообщение">
+    <button id="mainBtn">Отправить лично</button>
+</div>
+
+<div id="feed" style="width: 100%; max-width: 500px; display: flex; flex-direction: column;"></div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import { 
+        getFirestore, collection, addDoc, query, orderBy, onSnapshot, 
+        serverTimestamp, where, or 
+    } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+    import { 
+        getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+
+    const firebaseConfig = { 
+        apiKey: "AIzaSyB-8dlbw4l69np4yIapFr0OXJi8VbH32_U",
+        authDomain: "index-48da6.firebaseapp.com",
+        projectId: "index-48da6",
+        storageBucket: "index-48da6.firebasestorage.app",
+        messagingSenderId: "830178181196", 
+        appId: "1:830178181196:web:f6203bd9d8bbd4613c34e9" 
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
+
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const userInfo = document.getElementById('userInfo');
+    const messageForm = document.getElementById('messageForm');
+
+    loginBtn.onclick = () => signInWithPopup(auth, provider);
+    logoutBtn.onclick = () => signOut(auth);
+
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            loginBtn.style.display = 'none';
+            userInfo.style.display = 'flex';
+            messageForm.style.display = 'block';
+            document.getElementById('userName').innerText = user.displayName;
+            document.getElementById('userPhoto').src = user.photoURL;
+            
+            // Запускаем прослушку сообщений только для этого пользователя
+            listenToMessages(user.email);
+        } else {
+            loginBtn.style.display = 'block';
+            userInfo.style.display = 'none';
+            messageForm.style.display = 'none';
+            document.getElementById('feed').innerHTML = "";
+        }
+    });
+
+    document.getElementById('mainBtn').onclick = async () => {
+        const receiver = document.getElementById('receiverEmail').value.trim().toLowerCase();
+        const msg = document.getElementById('message').value;
+
+        if(!receiver || !msg) return alert("Введите email получателя и текст!");
+        if(receiver === auth.currentUser.email) return alert("Нельзя писать самому себе!");
+
+        const btn = document.getElementById('mainBtn');
+        btn.disabled = true;
+
+        try {
+            await addDoc(collection(db, "private_messages"), {
+                sender: auth.currentUser.email,
+                senderName: auth.currentUser.displayName,
+                senderPhoto: auth.currentUser.photoURL,
+                receiver: receiver,
+                text: msg,
+                timestamp: serverTimestamp()
+            });
+            document.getElementById('message').value = "";
+        } catch (e) {
+            alert("Ошибка. Возможно, нужно настроить Rules в Firebase.");
+        }
+        btn.disabled = false;
+    };
+
+    function listenToMessages(myEmail) {
+        // Запрос: сообщения где я отправитель ИЛИ я получатель
+        const q = query(
+            collection(db, "private_messages"),
+            orderBy("timestamp", "desc")
+        );
+
+        onSnapshot(q, (snapshot) => {
+            const feed = document.getElementById('feed');
+            feed.innerHTML = "";
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                
+                // Фильтрация на стороне клиента (для простоты)
+                if (data.sender === myEmail || data.receiver === myEmail) {
+                    const isMine = data.sender === myEmail;
+                    const time = data.timestamp ? data.timestamp.toDate().toLocaleTimeString() : "...";
+                    
+                    feed.innerHTML += `
+                        <div class="post ${isMine ? 'sent' : 'received'}">
+                            <span class="dm-label">${isMine ? 'Вы отправили для ' + data.receiver : 'От: ' + data.sender}</span>
+                            <span class="time">${time}</span>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <img src="${data.senderPhoto || ''}" style="width: 24px; border-radius: 50%;">
+                                <b>${data.senderName}</b>
+                            </div>
+                            <p style="margin: 10px 0;">${data.text}</p>
+                        </div>
+                    `;
+                }
+            });
+        });
+    }
+</script>
+</body>
+</html>
