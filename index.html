@@ -2,188 +2,65 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloud Messenger</title>
-    <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; background: #f0f2f5; }
-        
-        /* Экран входа */
-        #authScreen { 
-            display: flex; justify-content: center; align-items: center; 
-            height: 100vh; background: #007bff; 
-        }
-        .login-box { background: white; padding: 40px; border-radius: 12px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-
-        /* Основной интерфейс */
-        #appScreen { display: none; height: 100vh; flex-direction: row; }
-        
-        /* Боковая панель */
-        .sidebar { width: 300px; background: white; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
-        .sidebar-header { padding: 15px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px; }
-        .user-list { flex: 1; overflow-y: auto; }
-        .user-item { 
-            display: flex; align-items: center; gap: 10px; padding: 12px 15px; 
-            cursor: pointer; border-bottom: 1px solid #f9f9f9; transition: 0.2s;
-        }
-        .user-item:hover { background: #f0f7ff; }
-        .user-item.active { background: #e7f3ff; border-left: 4px solid #007bff; }
-        .user-item img { width: 35px; height: 35px; border-radius: 50%; }
-
-        /* Окно чата */
-        .main-chat { flex: 1; display: flex; flex-direction: column; background: #e5ddd5; }
-        .chat-header { background: white; padding: 15px; font-weight: bold; border-bottom: 1px solid #ddd; }
-        #messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-        
-        .msg { max-width: 70%; padding: 8px 12px; border-radius: 10px; font-size: 14px; position: relative; }
-        .msg.sent { align-self: flex-end; background: #dcf8c6; }
-        .msg.received { align-self: flex-start; background: white; }
-
-        .input-area { background: white; padding: 15px; display: flex; gap: 10px; }
-        input { flex: 1; padding: 10px 15px; border: 1px solid #ddd; border-radius: 20px; outline: none; }
-        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; }
-        
-        .logout-btn { background: #ff4757; padding: 5px 10px; font-size: 12px; width: auto; margin-left: auto; }
-    </style>
+    <title>Supabase Project</title>
 </head>
 <body>
+    <div id="myInfo"></div>
+    <div id="groupList"></div>
 
-<div id="authScreen">
-    <div class="login-box">
-        <h2>Добро пожаловать!</h2>
-        <button id="loginBtn" style="width: 200px;">Войти через Google</button>
-    </div>
-</div>
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
 
-<div id="appScreen">
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <img id="myPhoto" src="" style="width: 30px; border-radius: 50%;">
-            <span id="myName" style="font-size: 14px; font-weight: bold;"></span>
-            <button id="logoutBtn" class="logout-btn">Выход</button>
-        </div>
-        <div class="user-list" id="userList"></div>
-    </div>
+        const URL = 'https://ilqycuqiwuvedyzbpqbk.supabase.co';
+        const KEY = 'sb_publishable_Pj-J6f4M3wo_2V5bdbmeDQ_nFs1Xwi_';
+        const supabase = createClient(URL, KEY);
 
-    <div class="main-chat">
-        <div class="chat-header" id="chatTitle">Выберите чат</div>
-        <div id="messages"></div>
-        <div class="input-area" id="inputArea" style="display: none;">
-            <input type="text" id="msgInput" placeholder="Введите сообщение...">
-            <button id="sendBtn">Отправить</button>
-        </div>
-    </div>
-</div>
+        const MY_ID = '8d5d9b7c-8049-4cc9-88c0-a7e1c4574721';
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, setDoc, doc, where } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
-    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+        window.changeStatus = async (text, color) => {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ status: text, color: color })
+                .eq('id', MY_ID);
 
-    const firebaseConfig = { 
-        apiKey: "AIzaSyB-8dlbw4l69np4yIapFr0OXJi8VbH32_U",
-        authDomain: "index-48da6.firebaseapp.com",
-        projectId: "index-48da6",
-        storageBucket: "index-48da6.firebasestorage.app",
-        messagingSenderId: "830178181196", 
-        appId: "1:830178181196:web:f6203bd9d8bbd4613c34e9" 
-    };
+            if (error) {
+                alert("Ошибка! Проверьте RLS политики в Supabase.");
+                console.error(error);
+            } else {
+                fetchGroup();
+            }
+        };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const auth = getAuth(app);
-    const provider = new GoogleAuthProvider();
+        async function fetchGroup() {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .order('username', { ascending: true });
 
-    let currentUser = null;
-    let selectedUserId = null;
-    let unsub = null;
+            if (error) return console.error(error);
 
-    // --- ЛОГИКА АВТОРИЗАЦИИ ---
-    onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            currentUser = user;
-            document.getElementById('authScreen').style.display = 'none';
-            document.getElementById('appScreen').style.display = 'flex';
-            document.getElementById('myName').innerText = user.displayName;
-            document.getElementById('myPhoto').src = user.photoURL;
+            const list = document.getElementById('groupList');
+            list.innerHTML = data.map(user => `
+                <div class="user-item">
+                    <div class="status-dot" style="background: ${user.color || '#ccc'}"></div>
+                    <div style="flex-grow: 1;">
+                        <strong>${user.username}</strong><br>
+                        <small style="color: #666;">${user.status || 'Статус не задан'}</small>
+                    </div>
+                </div>
+            `).join('');
 
-            // Сохраняем себя в списке пользователей
-            await setDoc(doc(db, "users", user.uid), {
-                uid: user.uid,
-                name: user.displayName,
-                photo: user.photoURL
-            }, { merge: true });
-
-            loadUsers();
-        } else {
-            document.getElementById('authScreen').style.display = 'flex';
-            document.getElementById('appScreen').style.display = 'none';
+            const me = data.find(u => u.id === MY_ID);
+            if (me) {
+                document.getElementById('myInfo').innerText = `Вы зашли как: ${me.username}`;
+            }
         }
-    });
 
-    document.getElementById('loginBtn').onclick = () => signInWithPopup(auth, provider);
-    document.getElementById('logoutBtn').onclick = () => signOut(auth);
+        // Первичный вызов функции
+        fetchGroup();
 
-    // --- ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ ---
-    function loadUsers() {
-        onSnapshot(collection(db, "users"), (snapshot) => {
-            const list = document.getElementById('userList');
-            list.innerHTML = "";
-            snapshot.forEach(uDoc => {
-                const user = uDoc.data();
-                if (user.uid === currentUser.uid) return;
-
-                const div = document.createElement('div');
-                div.className = 'user-item';
-                div.innerHTML = `<img src="${user.photo}"> <span>${user.name}</span>`;
-                div.onclick = () => selectChat(user.uid, user.name);
-                list.appendChild(div);
-            });
-        });
-    }
-
-    // --- ВЫБОР ЧАТА ---
-    function selectChat(uid, name) {
-        selectedUserId = uid;
-        document.getElementById('chatTitle').innerText = name;
-        document.getElementById('inputArea').style.display = 'flex';
-        
-        // Формируем ID чата: ID1_ID2 (всегда по алфавиту, чтобы у обоих был один ID)
-        const chatId = currentUser.uid < uid ? `${currentUser.uid}_${uid}` : `${uid}_${currentUser.uid}`;
-        
-        if (unsub) unsub();
-        
-        const q = query(collection(db, "messages"), where("chatId", "==", chatId), orderBy("timestamp", "asc"));
-        unsub = onSnapshot(q, (snapshot) => {
-            const box = document.getElementById('messages');
-            box.innerHTML = "";
-            snapshot.forEach(mDoc => {
-                const m = mDoc.data();
-                const type = m.senderId === currentUser.uid ? 'sent' : 'received';
-                box.innerHTML += `<div class="msg ${type}">${m.text}</div>`;
-            });
-            box.scrollTop = box.scrollHeight;
-        });
-    }
-
-    // --- ОТПРАВКА ---
-    async function send() {
-        const input = document.getElementById('msgInput');
-        if (!input.value.trim() || !selectedUserId) return;
-
-        const chatId = currentUser.uid < selectedUserId ? `${currentUser.uid}_${selectedUserId}` : `${selectedUserId}_${currentUser.uid}`;
-        
-        await addDoc(collection(db, "messages"), {
-            chatId: chatId,
-            senderId: currentUser.uid,
-            text: input.value,
-            timestamp: serverTimestamp()
-        });
-        input.value = "";
-    }
-
-    document.getElementById('sendBtn').onclick = send;
-    document.getElementById('msgInput').onkeypress = (e) => { if(e.key === 'Enter') send(); };
-
-</script>
+        // Обновление списка каждые 5 секунд
+        setInterval(fetchGroup, 5000);
+    </script>
 </body>
 </html>
