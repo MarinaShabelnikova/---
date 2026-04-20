@@ -3,98 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Монитор Статуса</title>
+    <title>Монитор Статуса (Google Auth)</title>
     <style>
-        /* Общие стили страницы */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f0f2f5;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 40px 20px;
-            margin: 0;
-        }
-
-        /* Контейнеры-карточки */
-        .card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            width: 100%;
-            max-width: 500px;
-            padding: 25px;
-            margin-bottom: 20px;
-        }
-
-        h2 {
-            margin-top: 0;
-            font-size: 20px;
-            color: #1a1a1a;
-        }
-
-        #myInfo {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 20px;
-        }
-
-        /* Сетка кнопок */
-        .button-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-
-        button {
-            border: none;
-            border-radius: 8px;
-            padding: 12px;
-            color: white;
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            transition: transform 0.1s, opacity 0.2s;
-        }
-
-        button:hover { opacity: 0.9; }
-        button:active { transform: scale(0.98); }
-
-        /* Цвета кнопок со скриншота */
+        /* ... (ваши стили остаются прежними) ... */
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; margin: 0; }
+        .card { background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); width: 100%; max-width: 500px; padding: 25px; margin-bottom: 20px; }
+        .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        button { border: none; border-radius: 8px; padding: 12px; color: white; font-weight: 600; cursor: pointer; transition: transform 0.1s; }
         .btn-study { background-color: #28a745; }
         .btn-coffee { background-color: #ffc107; color: #000; }
         .btn-game  { background-color: #17a2b8; }
         .btn-home  { background-color: #6c757d; }
-
-        /* Список пользователей */
-        .user-item {
-            display: flex;
-            align-items: center;
-            padding: 15px 0;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        .user-item:last-child { border-bottom: none; }
-
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 15px;
-            flex-shrink: 0;
-        }
-
-        .user-info strong { font-size: 16px; color: #333; }
-        .user-info small { color: #888; display: block; margin-top: 2px; }
+        .btn-google { background-color: #4285F4; width: 100%; margin-top: 10px; }
+        .hidden { display: none; }
+        .user-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h2>Мой профиль</h2>
-        <div id="myInfo">Загрузка...</div>
+    <div id="authBlock" class="card">
+        <h2>Вход в систему</h2>
+        <p>Для обновления статуса необходимо войти через Google</p>
+        <button class="btn-google" onclick="signIn()">Войти через Google</button>
+    </div>
+
+    <div id="profileBlock" class="card hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="margin:0">Мой профиль</h2>
+            <a href="#" onclick="signOut()" style="font-size: 12px; color: #666;">Выйти</a>
+        </div>
+        <div id="myInfo" style="margin: 15px 0;">Загрузка...</div>
         
         <div class="button-grid">
             <button class="btn-study" onclick="changeStatus('📚 Учусь', '#28a745')">📚 Учусь</button>
@@ -116,21 +55,51 @@
         const KEY = 'sb_publishable_Pj-J6f4M3wo_2V5bdbmeDQ_nFs1Xwi_';
         const supabase = createClient(URL, KEY);
 
-        const MY_ID = '8d5d9b7c-8049-4cc9-88c0-a7e1c4574721';
+        let currentUser = null;
 
+        // Авторизация
+        window.signIn = async () => {
+            await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: { redirectTo: window.location.href }
+            });
+        };
+
+        window.signOut = async () => {
+            await supabase.auth.signOut();
+            window.location.reload();
+        };
+
+        // Смена статуса
         window.changeStatus = async (text, color) => {
+            if (!currentUser) return alert("Нужно войти!");
+
             const { error } = await supabase
                 .from('profiles')
-                .update({ status: text, color: color })
-                .eq('id', MY_ID);
+                .upsert({ 
+                    id: currentUser.id, 
+                    status: text, 
+                    color: color,
+                    username: currentUser.user_metadata.full_name || currentUser.email
+                });
 
             if (error) {
-                alert("Ошибка! Проверьте RLS политики.");
                 console.error(error);
+                alert("Ошибка обновления. Проверьте RLS!");
             } else {
                 fetchGroup();
             }
         };
+
+        async function checkUser() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                currentUser = user;
+                document.getElementById('authBlock').classList.add('hidden');
+                document.getElementById('profileBlock').classList.remove('hidden');
+                document.getElementById('myInfo').innerText = `Вы зашли как: ${user.user_metadata.full_name || user.email}`;
+            }
+        }
 
         async function fetchGroup() {
             const { data, error } = await supabase
@@ -140,7 +109,6 @@
 
             if (error) return console.error(error);
 
-            // Отрисовка списка группы
             const list = document.getElementById('groupList');
             list.innerHTML = data.map(user => `
                 <div class="user-item">
@@ -151,14 +119,10 @@
                     </div>
                 </div>
             `).join('');
-
-            // Отрисовка информации о себе
-            const me = data.find(u => u.id === MY_ID);
-            if (me) {
-                document.getElementById('myInfo').innerText = `Вы зашли как: ${me.username}`;
-            }
         }
 
+        // Инициализация
+        checkUser();
         fetchGroup();
         setInterval(fetchGroup, 5000);
     </script>
