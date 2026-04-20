@@ -49,82 +49,97 @@
     </div>
 
     <script type="module">
-        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
 
-        const URL = 'https://ilqycuqiwuvedyzbpqbk.supabase.co';
-        const KEY = 'sb_publishable_Pj-J6f4M3wo_2V5bdbmeDQ_nFs1Xwi_';
-        const supabase = createClient(URL, KEY);
+    const URL = 'https://ilqycuqiwuvedyzbpqbk.supabase.co';
+    const KEY = 'sb_publishable_Pj-J6f4M3wo_2V5bdbmeDQ_nFs1Xwi_';
+    const supabase = createClient(URL, KEY);
 
-        let currentUser = null;
+    let currentUser = null;
 
-        // Авторизация
-        window.signIn = async () => {
-            await supabase.auth.signInWithOAuth({
-                provider: 'google',
-                options: { redirectTo: window.location.href }
+    // 1. ФУНКЦИЯ ВХОДА
+    window.signIn = async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { 
+                // Важно: перенаправляем именно на ту страницу, где находимся
+                redirectTo: window.location.origin + window.location.pathname 
+            }
+        });
+        if (error) console.error("Ошибка входа:", error.message);
+    };
+
+    // 2. ФУНКЦИЯ ВЫХОДА
+    window.signOut = async () => {
+        await supabase.auth.signOut();
+        window.location.reload();
+    };
+
+    // 3. СМЕНА СТАТУСА
+    window.changeStatus = async (text, color) => {
+        if (!currentUser) return alert("Сначала войдите!");
+
+        const { error } = await supabase
+            .from('profiles')
+            .upsert({ 
+                id: currentUser.id, 
+                status: text, 
+                color: color,
+                username: currentUser.user_metadata.full_name || currentUser.email
             });
-        };
 
-        window.signOut = async () => {
-            await supabase.auth.signOut();
-            window.location.reload();
-        };
-
-        // Смена статуса
-        window.changeStatus = async (text, color) => {
-            if (!currentUser) return alert("Нужно войти!");
-
-            const { error } = await supabase
-                .from('profiles')
-                .upsert({ 
-                    id: currentUser.id, 
-                    status: text, 
-                    color: color,
-                    username: currentUser.user_metadata.full_name || currentUser.email
-                });
-
-            if (error) {
-                console.error(error);
-                alert("Ошибка обновления. Проверьте RLS!");
-            } else {
-                fetchGroup();
-            }
-        };
-
-        async function checkUser() {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                currentUser = user;
-                document.getElementById('authBlock').classList.add('hidden');
-                document.getElementById('profileBlock').classList.remove('hidden');
-                document.getElementById('myInfo').innerText = `Вы зашли как: ${user.user_metadata.full_name || user.email}`;
-            }
+        if (error) {
+            console.error(error);
+            alert("Ошибка! Проверьте RLS политики в таблице profiles.");
+        } else {
+            fetchGroup();
         }
+    };
 
-        async function fetchGroup() {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .order('username', { ascending: true });
-
-            if (error) return console.error(error);
-
-            const list = document.getElementById('groupList');
-            list.innerHTML = data.map(user => `
-                <div class="user-item">
-                    <div class="status-dot" style="background: ${user.color || '#ccc'}"></div>
-                    <div class="user-info">
-                        <strong>${user.username}</strong>
-                        <small>${user.status || 'Статус не задан'}</small>
-                    </div>
-                </div>
-            `).join('');
+    // 4. ГЛАВНАЯ ФУНКЦИЯ: СЛУШАЕМ ИЗМЕНЕНИЯ ВХОДА
+    supabase.auth.onAuthStateChange((event, session) => {
+        if (session?.user) {
+            currentUser = session.user;
+            showApp(currentUser);
+        } else {
+            showAuth();
         }
+    });
 
-        // Инициализация
-        checkUser();
+    function showApp(user) {
+        document.getElementById('authBlock').classList.add('hidden');
+        document.getElementById('profileBlock').classList.remove('hidden');
+        document.getElementById('myInfo').innerText = `Вы зашли как: ${user.user_metadata.full_name || user.email}`;
         fetchGroup();
-        setInterval(fetchGroup, 5000);
-    </script>
+    }
+
+    function showAuth() {
+        document.getElementById('authBlock').classList.remove('hidden');
+        document.getElementById('profileBlock').classList.add('hidden');
+    }
+
+    async function fetchGroup() {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .order('username', { ascending: true });
+
+        if (error) return console.error(error);
+
+        const list = document.getElementById('groupList');
+        list.innerHTML = data.map(user => `
+            <div class="user-item">
+                <div class="status-dot" style="background: ${user.color || '#ccc'}"></div>
+                <div class="user-info">
+                    <strong>${user.username}</strong>
+                    <small>${user.status || 'Статус не задан'}</small>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Запускаем обновление списка каждые 5 секунд
+    setInterval(fetchGroup, 5000);
+</script>
 </body>
 </html>
