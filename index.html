@@ -57,50 +57,57 @@
 
     let currentUser = null;
 
-    // 1. ФУНКЦИЯ ВХОДА
+    // Считает, сколько времени прошло с начала учебы
+    function getStudyDuration(startTime) {
+        if (!startTime) return "";
+        const diff = Math.floor((new Date() - new Date(startTime)) / 1000);
+        const hours = Math.floor(diff / 3600);
+        const mins = Math.floor((diff % 3600) / 60);
+        return `⏳ ${hours}ч ${mins}м в учебе`;
+    }
+
     window.signIn = async () => {
-        const { error } = await supabase.auth.signInWithOAuth({
+        await supabase.auth.signInWithOAuth({
             provider: 'google',
-            options: { 
-                // Важно: перенаправляем именно на ту страницу, где находимся
-                redirectTo: window.location.origin + window.location.pathname 
-            }
+            options: { redirectTo: window.location.origin + window.location.pathname }
         });
-        if (error) console.error("Ошибка входа:", error.message);
     };
 
-    // 2. ФУНКЦИЯ ВЫХОДА
     window.signOut = async () => {
         await supabase.auth.signOut();
         window.location.reload();
     };
 
-    // 3. СМЕНА СТАТУСА
     window.changeStatus = async (text, color) => {
-        if (!currentUser) return alert("Сначала войдите!");
-
+        if (!currentUser) return;
+        
+        const isStudying = text.includes("Учусь");
+        
         const { error } = await supabase
             .from('profiles')
             .upsert({ 
                 id: currentUser.id, 
                 status: text, 
                 color: color,
-                username: currentUser.user_metadata.full_name || currentUser.email
+                username: currentUser.user_metadata.full_name || currentUser.email,
+                study_start: isStudying ? new Date().toISOString() : null, // Ставим время только если "Учусь"
+                last_seen: new Date().toISOString()
             });
 
-        if (error) {
-            console.error(error);
-            alert("Ошибка! Проверьте RLS политики в таблице profiles.");
-        } else {
-            fetchGroup();
-        }
+        if (!error) fetchGroup();
     };
 
-    // 4. ГЛАВНАЯ ФУНКЦИЯ: СЛУШАЕМ ИЗМЕНЕНИЯ ВХОДА
+    // Обновляем "last_seen", чтобы другие видели, что мы онлайн
+    async function updatePresence() {
+        if (!currentUser) return;
+        await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', currentUser.id);
+    }
+
     supabase.auth.onAuthStateChange((event, session) => {
         if (session?.user) {
             currentUser = session.user;
             showApp(currentUser);
+            setInterval(updatePresence, 10000); // Каждые 10 сек говорим базе, что мы тут
         } else {
             showAuth();
         }
@@ -109,7 +116,7 @@
     function showApp(user) {
         document.getElementById('authBlock').classList.add('hidden');
         document.getElementById('profileBlock').classList.remove('hidden');
-        document.getElementById('myInfo').innerText = `Вы зашли как: ${user.user_metadata.full_name || user.email}`;
+        document.getElementById('myInfo').innerText = `Вы: ${user.user_metadata.full_name || user.email}`;
         fetchGroup();
     }
 
@@ -119,27 +126,31 @@
     }
 
     async function fetchGroup() {
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .order('username', { ascending: true });
-
-        if (error) return console.error(error);
+        const { data, error } = await supabase.from('profiles').select('*').order('last_seen', { ascending: false });
+        if (error) return;
 
         const list = document.getElementById('groupList');
-        list.innerHTML = data.map(user => `
-            <div class="user-item">
-                <div class="status-dot" style="background: ${user.color || '#ccc'}"></div>
-                <div class="user-info">
-                    <strong>${user.username}</strong>
-                    <small>${user.status || 'Статус не задан'}</small>
+        const now = new Date();
+
+        list.innerHTML = data.map(user => {
+            // Если последнее обновление было меньше 30 сек назад — он онлайн
+            const isOnline = (now - new Date(user.last_seen)) < 30000;
+            const studyInfo = user.study_start ? `<div style="font-size:11px; color:#28a745;">${getStudyDuration(user.study_start)}</div>` : "";
+
+            return `
+                <div class="user-item" style="opacity: ${isOnline ? 1 : 0.5}">
+                    <div class="status-dot" style="background: ${user.color || '#ccc'}"></div>
+                    <div class="user-info">
+                        <strong>${user.username} ${isOnline ? '🟢' : '⚪'}</strong>
+                        <div>${user.status || 'Отдыхает'}</div>
+                        ${studyInfo}
+                    </div>
                 </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
-    // Запускаем обновление списка каждые 5 секунд
-    setInterval(fetchGroup, 5000);
+    setInterval(fetchGroup, 5000); // Обновляем список каждые 5 сек
 </script>
 </body>
 </html>
