@@ -47,6 +47,16 @@
         <h2>Монитор группы</h2>
         <div id="groupList"></div>
     </div>
+    
+    <div class="card">
+    <div class="monitor-title">💬 Общий чат</div>
+    <div id="chatBox" style="height: 200px; overflow-y: auto; text-align: left; border: 1px solid #eee; border-radius: 10px; padding: 10px; margin-bottom: 10px; background: #fafafa;">
+        </div>
+    <div style="display: flex; gap: 8px;">
+        <input type="text" id="chatInput" placeholder="Сообщение..." style="flex-grow: 1; padding: 10px; border-radius: 8px; border: 1px solid #ddd;">
+        <button onclick="sendMessage()" style="background: #34a853; border: none; border-radius: 8px; padding: 10px 15px; color: white; cursor: pointer;">➤</button>
+    </div>
+</div>
 
     <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
@@ -164,6 +174,66 @@
             </div>
         `;
     }).join('');
+
+        // ... (твой существующий код supabase) ...
+
+// Функция отправки сообщения
+window.sendMessage = async () => {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text || !currentUser) return;
+
+    const { error } = await supabase.from('messages').insert({
+        text: text,
+        username: currentUser.user_metadata.full_name || currentUser.email,
+        user_id: currentUser.id
+    });
+
+    if (!error) input.value = ''; // Очистить поле
+};
+
+// Функция отрисовки сообщений
+async function fetchMessages() {
+    const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(50);
+
+    if (error) return;
+    
+    const chatBox = document.getElementById('chatBox');
+    chatBox.innerHTML = data.map(msg => `
+        <div style="margin-bottom: 8px; font-size: 14px;">
+            <b style="color: #4285F4;">${msg.username}:</b> <span>${msg.text}</span>
+        </div>
+    `).join('');
+    chatBox.scrollTop = chatBox.scrollHeight; // Прокрутка вниз
+}
+
+// ВКЛЮЧАЕМ REALTIME ПОДПИСКУ
+supabase
+    .channel('public:messages')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        console.log('Новое сообщение!', payload);
+        fetchMessages(); // Перерисовываем чат при новом сообщении
+    })
+    .subscribe();
+
+// Вызови fetchMessages один раз при загрузке (внутри onAuthStateChange)
+// Например:
+supabase.auth.onAuthStateChange((event, session) => {
+    if (session?.user) {
+        currentUser = session.user;
+        // ... (твой код) ...
+        fetchMessages(); // Загружаем историю чата
+    }
+});
+
+// Слушаем Enter в поле ввода
+document.getElementById('chatInput')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendMessage();
+});
 }
 
     setInterval(fetchGroup, 5000); // Обновляем список каждые 5 сек
