@@ -126,29 +126,45 @@
     }
 
     async function fetchGroup() {
-        const { data, error } = await supabase.from('profiles').select('*').order('last_seen', { ascending: false });
-        if (error) return;
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('last_seen', { ascending: false });
 
-        const list = document.getElementById('groupList');
-        const now = new Date();
+    if (error) return;
 
-        list.innerHTML = data.map(user => {
-            // Если последнее обновление было меньше 30 сек назад — он онлайн
-            const isOnline = (now - new Date(user.last_seen)) < 30000;
-            const studyInfo = user.study_start ? `<div style="font-size:11px; color:#28a745;">${getStudyDuration(user.study_start)}</div>` : "";
+    const list = document.getElementById('groupList');
+    const now = new Date();
 
-            return `
-                <div class="user-item" style="opacity: ${isOnline ? 1 : 0.5}">
-                    <div class="status-dot" style="background: ${user.color || '#ccc'}"></div>
-                    <div class="user-info">
-                        <strong>${user.username} ${isOnline ? '🟢' : '⚪'}</strong>
-                        <div>${user.status || 'Отдыхает'}</div>
-                        ${studyInfo}
+    list.innerHTML = data.map(user => {
+        // Логика онлайн: если обновлялся меньше 40 секунд назад
+        const lastSeenDate = new Date(user.last_seen);
+        const isOnline = (now - lastSeenDate) < 40000; 
+
+        // Логика времени учебы
+        let studyInfo = "";
+        if (user.status && user.status.includes("Учусь") && user.study_start) {
+            studyInfo = `<div style="font-size: 12px; color: #28a745; margin-top: 4px; display: flex; align-items: center; gap: 4px;">
+                <span>⏳</span> ${getStudyDuration(user.study_start)}
+            </div>`;
+        }
+
+        return `
+            <div class="user-item" style="display: flex; align-items: center; padding: 15px; border-bottom: 1px solid #eee; position: relative;">
+                <div style="width: 12px; height: 12px; border-radius: 50%; background: ${user.color || '#ccc'}; margin-right: 15px; box-shadow: ${isOnline ? '0 0 10px ' + user.color : 'none'};"></div>
+                
+                <div style="flex-grow: 1;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <strong style="font-size: 16px; color: #333;">${user.username}</strong>
+                        <span title="${isOnline ? 'В сети' : 'Офлайн'}" style="font-size: 10px;">${isOnline ? '🟢' : '⚪'}</span>
                     </div>
+                    <div style="font-size: 14px; color: #666; margin-top: 2px;">${user.status || 'Нет статуса'}</div>
+                    ${studyInfo}
                 </div>
-            `;
-        }).join('');
-    }
+            </div>
+        `;
+    }).join('');
+}
 
     setInterval(fetchGroup, 5000); // Обновляем список каждые 5 сек
 </script>
