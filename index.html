@@ -20,13 +20,55 @@
             --status-dnd: #9b59b6;
         }
 
+        /* СТИЛИ ДЛЯ СВЕТЛОЙ ТЕМЫ */
+        body.light-theme {
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --text-light: #1f2833;
+            --text-muted: #6c757d;
+            --accent-color: #007bff;
+            --accent-hover: #0056b3;
+            border-color: rgba(0,0,0,0.1);
+        }
+        body.light-theme .card {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        body.light-theme .btn-status {
+            background: rgba(0,0,0,0.03);
+            color: #1f2833;
+        }
+        body.light-theme .btn-status:hover {
+            background: rgba(0,0,0,0.08);
+        }
+        body.light-theme .user-row {
+            background: rgba(0,0,0,0.01);
+            border: 1px solid rgba(0,0,0,0.03);
+        }
+        body.light-theme .chat-box {
+            background: rgba(0,0,0,0.03);
+        }
+        body.light-theme .chat-msg {
+            background: rgba(0,0,0,0.02);
+        }
+        body.light-theme .chat-input {
+            background: #ffffff;
+            color: #1f2833;
+            border: 1px solid rgba(0,0,0,0.15);
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-        body { background-color: var(--bg-color); color: var(--text-light); padding: 20px; display: flex; justify-content: center; min-height: 100vh; }
+        body { background-color: var(--bg-color); color: var(--text-light); padding: 20px; display: flex; justify-content: center; min-height: 100vh; transition: background 0.3s, color 0.3s; }
         
         .container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 20px; }
-        h1 { color: var(--accent-color); font-size: 24px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
         
-        .card { background: var(--card-bg); border-radius: 16px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05); }
+        /* Шапка с кнопкой смены темы */
+        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        h1 { color: var(--accent-color); font-size: 24px; text-transform: uppercase; letter-spacing: 1px; }
+        .theme-toggle-btn { background: var(--card-bg); border: 1px solid rgba(255,255,255,0.1); color: var(--text-light); width: 40px; height: 40px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: all 0.2s; }
+        .theme-toggle-btn:hover { transform: scale(1.05); }
+
+        .card { background: var(--card-bg); border-radius: 16px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05); transition: background 0.3s; }
         .hidden { display: none !important; }
 
         /* Блок авторизации */
@@ -135,7 +177,10 @@
 <body>
 
 <div class="container">
-    <h1>REALTIME MONITOR</h1>
+    <div class="header-row">
+        <h1>REALTIME MONITOR</h1>
+        <button id="themeToggle" class="theme-toggle-btn" onclick="window.toggleTheme()" title="Сменить тему">🌓</button>
+    </div>
 
     <div id="authBlock" class="card">
         <div class="auth-title">Вход в систему</div>
@@ -257,6 +302,24 @@
         document.getElementById(`content-${tabName}`).classList.remove('hidden');
     };
 
+    // ФУНКЦИЯ ПЕРЕКЛЮЧЕНИЯ ТЕМЫ С ЗАПИСЬЮ В СУБД
+    window.toggleTheme = async () => {
+        const isCurrentlyLight = document.body.classList.contains('light-theme');
+        const nextTheme = isCurrentlyLight ? 'dark' : 'light';
+        
+        // Переключаем визуально в браузере мгновенно
+        if (nextTheme === 'light') {
+            document.body.classList.add('light-theme');
+        } else {
+            document.body.classList.remove('light-theme');
+        }
+
+        // Если пользователь залогинен, сохраняем настройку в его профиль в БД
+        if (currentUser) {
+            await supabase.from('profiles').update({ theme: nextTheme }).eq('id', currentUser.id);
+        }
+    };
+
     window.changeStatus = async (statusText, btnId) => {
         if (!currentUser) return;
         
@@ -293,7 +356,6 @@
         if(!currentUser) return;
         const myName = currentUser.user_metadata.full_name || currentUser.email;
         
-        // Отправка пинга (теперь защищена от 403 ошибки политиками RLS)
         await supabase.from('pings').insert({
             sender_id: currentUser.id,
             sender_name: myName,
@@ -396,6 +458,13 @@
 
         myProfile = profiles.find(p => p.id === currentUser?.id);
         
+        // ПОДГРУЖАЕМ ТЕМУ ИЗ БАЗЫ ДАННЫХ ПРИ ЗАГРУЗКЕ
+        if (myProfile && myProfile.theme === 'light') {
+            document.body.classList.add('light-theme');
+        } else {
+            document.body.classList.remove('light-theme');
+        }
+        
         if (myProfile && !myProfile.status?.includes('Учусь')) {
             if (studyInterval) clearInterval(studyInterval);
             studyInterval = null;
@@ -422,7 +491,6 @@
         if (!container) return;
         const now = new Date();
         
-        // Удаляем дубликаты записей
         const uniqueProfiles = [];
         const seenIds = new Set();
         allProfiles.forEach(p => {
@@ -523,7 +591,6 @@
         await loadData();
         await loadMessages();
 
-        // Безопасное создание подписки: убираем старый канал перед созданием нового
         await supabase.removeAllChannels();
 
         supabase.channel('realtime_global_channel')
