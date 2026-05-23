@@ -123,8 +123,8 @@
             width: 280px; 
         }
         #reactionOverlay.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-        #reactionEmoji { font-size: 72px; margin-bottom: 14px; animation: bounce 0.6s infinite alternate; }
-        #reactionSender { font-weight: bold; color: white; font-size: 16px; text-align: center; }
+        #reactionEmoji { font-size: 72px; margin-bottom: 14px; display: block; text-align: center; animation: bounce 0.6s infinite alternate; }
+        #reactionSender { font-weight: bold; color: white; font-size: 16px; text-align: center; display: block; }
 
         @keyframes bounce { 
             from { transform: translateY(0); } 
@@ -232,10 +232,9 @@
             gain.connect(ctx.destination);
             osc.start();
             osc.stop(ctx.currentTime + 0.3);
-        } catch(e) { console.log("Аудиозапись заблокирована браузером до первого клика."); }
+        } catch(e) { console.log("Аудио заблокировано до первого клика."); }
     }
 
-    // Привязываем методы к объекту window для доступа из HTML разметки
     window.signIn = async () => {
         await supabase.auth.signInWithOAuth({
             provider: 'google',
@@ -293,6 +292,8 @@
     window.sendPing = async (targetUserId, emoji) => {
         if(!currentUser) return;
         const myName = currentUser.user_metadata.full_name || currentUser.email;
+        
+        // Отправка пинга (теперь защищена от 403 ошибки политиками RLS)
         await supabase.from('pings').insert({
             sender_id: currentUser.id,
             sender_name: myName,
@@ -421,10 +422,9 @@
         if (!container) return;
         const now = new Date();
         
-        // Фильтруем уникальные профили, чтобы избежать дублирования
+        // Удаляем дубликаты записей
         const uniqueProfiles = [];
         const seenIds = new Set();
-        
         allProfiles.forEach(p => {
             if (!seenIds.has(p.id)) {
                 seenIds.add(p.id);
@@ -523,8 +523,10 @@
         await loadData();
         await loadMessages();
 
-        // Единая защищенная Realtime подписка
-        supabase.channel('global_changes')
+        // Безопасное создание подписки: убираем старый канал перед созданием нового
+        await supabase.removeAllChannels();
+
+        supabase.channel('realtime_global_channel')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
                 loadData();
             })
