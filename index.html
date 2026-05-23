@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Монитор Статуса и Достижений</title>
+    <title>Монитор Статуса, Чат и Достижения</title>
     <style>
         body { font-family: 'Segoe UI', -apple-system, sans-serif; background-color: #0b0c10; color: #c5c6c7; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
         .card { background: #1f2833; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); width: 100%; max-width: 480px; padding: 20px; margin-bottom: 20px; box-sizing: border-box; border: 1px solid #2f3e46; }
@@ -36,6 +36,17 @@
         .user-name { font-weight: bold; color: #fff; font-size: 14px; }
         .user-status-text { font-size: 12px; color: #858585; margin-top: 2px; }
         
+        /* Стили Общего Чата */
+        #chatBox { height: 220px; overflow-y: auto; border: 1px solid #232d3a; background: #151c24; border-radius: 12px; padding: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .chat-msg { font-size: 13px; line-height: 1.4; background: #1f2833; padding: 8px 12px; border-radius: 10px; border-left: 3px solid #66fcf1; width: max-content; max-width: 90%; }
+        .chat-meta { font-size: 10px; color: #858585; margin-bottom: 2px; font-weight: bold; }
+        .chat-text { color: #fff; word-break: break-word; }
+        .chat-input-row { display: flex; gap: 8px; }
+        .chat-input-row input { flex-grow: 1; background: #151c24; border: 1px solid #232d3a; border-radius: 8px; padding: 10px; color: white; font-size: 13px; }
+        .chat-input-row input:focus { border-color: #66fcf1; outline: none; }
+        .chat-send-btn { background: #34a853; border: none; color: white; padding: 0 16px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .chat-send-btn:hover { background: #28a745; }
+
         /* Достижения */
         .achievements-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
         .ach-card { background: #151c24; border: 1px solid #232d3a; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; position: relative; transition: 0.2s; }
@@ -92,6 +103,15 @@
         <div id="content-users" class="list-container"></div>
         <div id="content-rating" class="list-container hidden"></div>
         <div id="content-achievements" class="achievements-grid hidden"></div>
+    </div>
+
+    <div id="chatCard" class="card hidden">
+        <h2>💬 Общий чат</h2>
+        <div id="chatBox"></div>
+        <div class="chat-input-row">
+            <input type="text" id="chatInput" placeholder="Сообщение..." onkeydown="if(event.key==='Enter') sendMessage()">
+            <button class="chat-send-btn" onclick="sendMessage()">➤</button>
+        </div>
     </div>
 
     <script type="module">
@@ -171,7 +191,6 @@
             if(studyInterval) clearInterval(studyInterval);
             
             const start = new Date(startTimeISO);
-            // Вычисляем, сколько секунд уже было накоплено в минутах ранее
             const baseMinutes = myProfile?.total_study_minutes || 0;
             let lastMinuteChecked = 0;
 
@@ -183,7 +202,6 @@
                     return;
                 }
 
-                // Текущие секунды сессии + сохраненные ранее минуты, переведенные в секунды
                 const currentSessionSec = Math.floor((new Date() - start) / 1000);
                 const totalSec = currentSessionSec + (baseMinutes * 60);
                 const diffMin = Math.floor(currentSessionSec / 60);
@@ -195,7 +213,6 @@
 
                 if (diffMin > lastMinuteChecked) {
                     lastMinuteChecked = diffMin;
-                    
                     const currentMinutes = baseMinutes + diffMin;
                     
                     await supabase.from('profiles').update({
@@ -208,6 +225,35 @@
                     if (currentMinutes >= 600) await awardAchievement('legend');
                 }
             }, 1000);
+        }
+
+        // Логика Чата
+        window.sendMessage = async () => {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text || !currentUser) return;
+
+            await supabase.from('messages').insert({
+                user_id: currentUser.id,
+                username: currentUser.user_metadata.full_name || currentUser.email,
+                text: text
+            });
+            input.value = '';
+            loadMessages();
+        };
+
+        async function loadMessages() {
+            const { data: messages } = await supabase.from('messages').select('*').order('created_at', { ascending: true }).limit(50);
+            if (!messages) return;
+
+            const box = document.getElementById('chatBox');
+            box.innerHTML = messages.map(m => `
+                <div class="chat-msg">
+                    <div class="chat-meta">${m.username}</div>
+                    <div class="chat-text">${m.text}</div>
+                </div>
+            `).join('');
+            box.scrollTop = box.scrollHeight;
         }
 
         async function awardAchievement(achId) {
@@ -246,7 +292,6 @@
                 const btn = document.getElementById('status-study');
                 if (btn) btn.classList.add('active');
             } else if (myProfile && !studyInterval) {
-                // Если мы не в режиме учёбы, отображаем общее накопленное время в неактивном состоянии
                 const totalMinutes = myProfile.total_study_minutes || 0;
                 const h = Math.floor(totalMinutes / 60);
                 const m = totalMinutes % 60;
@@ -261,7 +306,6 @@
         function renderUsers() {
             const container = document.getElementById('content-users');
             const now = new Date();
-            
             const sorted = [...allProfiles].sort((a,b) => new Date(b.last_seen) - new Date(a.last_seen));
 
             container.innerHTML = sorted.map(user => {
@@ -332,6 +376,7 @@
                     currentUser = null;
                     document.getElementById('authBlock').classList.remove('hidden');
                     document.getElementById('profileBlock').classList.add('hidden');
+                    document.getElementById('chatCard').classList.add('hidden');
                 }
             });
         }
@@ -340,13 +385,21 @@
             currentUser = user;
             document.getElementById('authBlock').classList.add('hidden');
             document.getElementById('profileBlock').classList.remove('hidden');
+            document.getElementById('chatCard').classList.remove('hidden');
             document.getElementById('myUserName').innerText = user.user_metadata.full_name || user.email;
             
             await loadBadges();
             await loadData();
+            await loadMessages();
 
+            // Подписка на обновление профилей
             supabase.channel('profiles_changed').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
                 loadData();
+            }).subscribe();
+
+            // Подписка на новые сообщения в чате (Realtime)
+            supabase.channel('messages_changed').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
+                loadMessages();
             }).subscribe();
         }
 
