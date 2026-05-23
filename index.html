@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Монитор Статуса, Чат и Реакции</title>
+    <title>Монитор Статуса, Чат и Достижения</title>
     <style>
         body { font-family: 'Segoe UI', -apple-system, sans-serif; background-color: #0b0c10; color: #c5c6c7; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
         .card { background: #1f2833; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); width: 100%; max-width: 480px; padding: 20px; margin-bottom: 20px; box-sizing: border-box; border: 1px solid #2f3e46; }
@@ -30,24 +30,11 @@
         
         /* Списки */
         .list-container { margin-top: 15px; display: flex; flex-direction: column; gap: 10px; }
-        .user-row { display: flex; align-items: center; background: #151c24; padding: 12px; border-radius: 12px; border: 1px solid #232d3a; position: relative; }
+        .user-row { display: flex; align-items: center; background: #151c24; padding: 12px; border-radius: 12px; border: 1px solid #232d3a; }
         .avatar { width: 40px; height: 40px; border-radius: 50%; background: #66fcf1; color: #0b0c10; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; margin-right: 12px; }
         .user-info { flex-grow: 1; }
         .user-name { font-weight: bold; color: #fff; font-size: 14px; }
         .user-status-text { font-size: 12px; color: #858585; margin-top: 2px; }
-        
-        /* Панель быстрых реакций */
-        .ping-panel { display: flex; gap: 6px; margin-left: auto; }
-        .ping-btn { background: #1f2833; border: 1px solid #232d3a; border-radius: 6px; padding: 6px; cursor: pointer; font-size: 14px; transition: 0.2s; }
-        .ping-btn:hover { background: #2f3e46; transform: scale(1.1); }
-
-        /* Всплывающее оверлей-уведомление для реакций */
-        #reactionOverlay { position: fixed; top: 20%; left: 50%; transform: translate(-50%, -50%) scale(0.5); background: rgba(31, 40, 51, 0.95); border: 2px solid #66fcf1; box-shadow: 0 0 30px rgba(102,252,241,0.6); padding: 20px 4px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; pointer-events: none; opacity: 0; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); width: 260px; }
-        #reactionOverlay.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-        #reactionEmoji { font-size: 64px; margin-bottom: 10px; animation: bounce 0.6s infinite alternate; }
-        #reactionSender { font-weight: bold; color: white; font-size: 15px; text-align: center; }
-
-        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-10px); } }
         
         /* Стили Общего Чата */
         #chatBox { height: 220px; overflow-y: auto; border: 1px solid #232d3a; background: #151c24; border-radius: 12px; padding: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -81,11 +68,6 @@
 <body>
 
     <h1 style="width:100%; max-width:480px; text-align:left; margin-bottom:10px;">REALTIME MONITOR</h1>
-
-    <div id="reactionOverlay">
-        <div id="reactionEmoji">👏</div>
-        <div id="reactionSender">От пользователя</div>
-    </div>
 
     <div id="authBlock" class="card">
         <h2>Вход в систему</h2>
@@ -151,24 +133,6 @@
             { id: 'first_step', title: '🌱 Первый шаг', desc: 'Просидел за учебой свою первую минуту', type: 'common' },
             { id: 'legend', title: '⚡ Легенда', desc: 'Накопил суммарно более 10 часов учебы', type: 'legendary' }
         ];
-
-        // Звуковой контекст для генерации "пинг"-звука без сторонних аудиофайлов
-        function playPingSound() {
-            try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(587.33, ctx.currentTime); // Ре5
-                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // Ля5
-                gain.gain.setValueAtTime(0.1, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.3);
-            } catch(e) { console.log("Аудио контекст заблокирован браузером."); }
-        }
 
         window.signIn = async () => {
             await supabase.auth.signInWithOAuth({
@@ -263,18 +227,6 @@
             }, 1000);
         }
 
-        // Функция отправки Пинга другу
-        window.sendPing = async (targetUserId, emoji) => {
-            if(!currentUser) return;
-            const myName = currentUser.user_metadata.full_name || currentUser.email;
-            await supabase.from('pings').insert({
-                sender_id: currentUser.id,
-                sender_name: myName,
-                receiver_id: targetUserId,
-                emoji: emoji
-            });
-        };
-
         // Логика Чата
         window.sendMessage = async () => {
             const input = document.getElementById('chatInput');
@@ -359,17 +311,6 @@
             container.innerHTML = sorted.map(user => {
                 const isOnline = (now - new Date(user.last_seen)) < 45000;
                 const firstLetter = user.username ? user.username.charAt(0).toUpperCase() : '?';
-                
-                // Кнопочки пинга рендерим только у ДРУГИХ пользователей, не у себя
-                const isMe = user.id === currentUser?.id;
-                const pingHTML = (!isMe && isOnline) ? `
-                    <div class="ping-panel">
-                        <button class="ping-btn" onclick="sendPing('${user.id}', '👏')" title="Поддержать">👏</button>
-                        <button class="ping-btn" onclick="sendPing('${user.id}', '☕')" title="Позвать пить кофе">☕</button>
-                        <button class="ping-btn" onclick="sendPing('${user.id}', '👀')" title="Проверить">👀</button>
-                    </div>
-                ` : '';
-
                 return `
                     <div class="user-row">
                         <div class="avatar">${firstLetter}</div>
@@ -377,7 +318,6 @@
                             <div class="user-name">${user.username || 'Аноним'} ${isOnline ? '🟢' : '⚪'}</div>
                             <div class="user-status-text">${user.status || 'Офлайн'}</div>
                         </div>
-                        ${pingHTML}
                     </div>
                 `;
             }).join('');
@@ -460,24 +400,6 @@
             // Подписка на новые сообщения в чате (Realtime)
             supabase.channel('messages_changed').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
                 loadMessages();
-            }).subscribe();
-
-            // Подписка на ПИНГИ (Новая фича реакций)
-            supabase.channel('pings_changed').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pings' }, (payload) => {
-                const newPing = payload.new;
-                // Проверяем, что пинг отправлен ИМЕННО МНЕ
-                if (newPing.receiver_id === currentUser.id) {
-                    const overlay = document.getElementById('reactionOverlay');
-                    document.getElementById('reactionEmoji').innerText = newPing.emoji;
-                    document.getElementById('reactionSender').innerText = `От: ${newPing.sender_name}`;
-                    
-                    overlay.classList.add('show');
-                    playPingSound();
-
-                    setTimeout(() => {
-                        overlay.classList.remove('show');
-                    }, 3000);
-                }
             }).subscribe();
         }
 
