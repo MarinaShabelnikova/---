@@ -17,47 +17,32 @@
         .btn-home   { background-color: #6c757d; }
         .btn-google { background-color: #4285F4; width: 100%; padding: 14px; font-size: 16px; }
         .btn-signout { background: none; border: 1px solid #ddd; color: #666; padding: 6px 14px; font-size: 12px; font-weight: 400; border-radius: 6px; cursor: pointer; }
-        .btn-signout:hover { background: #f5f5f5; }
         .hidden { display: none !important; }
-
         .user-item { display: flex; align-items: flex-start; padding: 12px; border-bottom: 1px solid #eee; }
         .status-dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 15px; margin-top: 5px; flex-shrink: 0; }
-
         #chatBox { height: 250px; overflow-y: auto; border: 1px solid #eee; border-radius: 10px; padding: 10px; margin-bottom: 10px; background: #fafafa; display: flex; flex-direction: column; gap: 8px; }
         .msg { font-size: 14px; line-height: 1.4; }
         .msg b { color: #4285F4; }
-
         .badges-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
         .badge { font-size: 11px; background: #f0f4ff; border: 1px solid #c7d4f7; color: #3a56c4; border-radius: 20px; padding: 2px 8px; cursor: default; }
-
         .rank-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; gap: 10px; }
         .rank-num { font-size: 18px; font-weight: 700; min-width: 34px; color: #aaa; }
         .rank-num.gold   { color: #f5a623; }
         .rank-num.silver { color: #9b9b9b; }
         .rank-num.bronze { color: #c87533; }
         .rank-score { margin-left: auto; font-size: 13px; font-weight: 600; color: #28a745; background: #f0fff4; border-radius: 12px; padding: 2px 10px; white-space: nowrap; }
-
         #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1a1a2e; color: #fff; padding: 12px 22px; border-radius: 30px; font-size: 14px; font-weight: 600; opacity: 0; transition: all 0.4s; z-index: 9999; pointer-events: none; }
         #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
         .tabs { display: flex; gap: 6px; margin-bottom: 16px; }
         .tab-btn { background: #f0f2f5; color: #555; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer; font-weight: 600; }
         .tab-btn.active { background: #4285F4; color: white; }
         .tab-pane { display: none; }
         .tab-pane.active { display: block; }
-
-        #loadingScreen { text-align: center; padding: 40px; color: #888; font-size: 15px; }
     </style>
 </head>
 <body>
 
 <div id="toast"></div>
-
-<!-- ЗАГРУЗКА -->
-<div id="loadingScreen" class="card">
-    <div style="font-size:28px;margin-bottom:10px;">⏳</div>
-    Загрузка...
-</div>
 
 <!-- АВТОРИЗАЦИЯ -->
 <div id="authBlock" class="card hidden">
@@ -73,7 +58,7 @@
             <div style="font-weight:700;font-size:18px;" id="userName">...</div>
             <div id="myBadges" class="badges-row"></div>
         </div>
-        <button class="btn-signout" id="signOutBtn">Выйти</button>
+        <button class="btn-signout" onclick="signOut()">Выйти</button>
     </div>
     <div class="button-grid">
         <button class="btn-study"  onclick="changeStatus('📚 Учусь','#28a745')">📚 Учусь</button>
@@ -86,8 +71,8 @@
 <!-- МОНИТОР + РЕЙТИНГ -->
 <div class="card">
     <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('monitor')">🎥 Монитор группы</button>
-        <button class="tab-btn" onclick="switchTab('rating')">🏆 Рейтинг</button>
+        <button class="tab-btn active" id="tabBtnMonitor" onclick="switchTab('monitor')">🎥 Монитор группы</button>
+        <button class="tab-btn" id="tabBtnRating" onclick="switchTab('rating')">🏆 Рейтинг</button>
     </div>
     <div id="tab-monitor" class="tab-pane active">
         <div id="groupList"><p style="color:#aaa;font-size:13px;">Загрузка...</p></div>
@@ -110,11 +95,17 @@
 <script type="module">
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
 
-const SUPA_URL = 'https://ilqycuqiwuvedyzbpqbk.supabase.co';
-const SUPA_KEY = 'sb_publishable_Pj-J6f4M3wo_2V5bdbmeDQ_nFs1Xwi_';
-const supabase = createClient(SUPA_URL, SUPA_KEY);
+const supabase = createClient(
+    'https://ilqycuqiwuvedyzbpqbk.supabase.co',
+    'sb_publishable_Pj-J6F4M3wo_2V5bdbmeDQ_nFs1Xwi_'
+);
 
 let currentUser = null;
+let appInitialized = false; // ← ГЛАВНЫЙ ФИЧ: не инициализировать дважды
+let realtimeChannel = null;
+let presenceInterval = null;
+let groupInterval = null;
+let achInterval = null;
 let activeTab = 'monitor';
 
 // ─── ДОСТИЖЕНИЯ ───────────────────────────────────────────────────────────────
@@ -129,7 +120,6 @@ const ACHIEVEMENTS = [
     { id: 'studyhero',    emoji: '🦸', name: 'Герой учёбы',      desc: 'Суммарно 10 часов учёбы'  },
 ];
 
-// ─── ТОСТ ─────────────────────────────────────────────────────────────────────
 function showToast(text) {
     const t = document.getElementById('toast');
     t.textContent = text;
@@ -137,56 +127,43 @@ function showToast(text) {
     setTimeout(() => t.classList.remove('show'), 3500);
 }
 
-// ─── ВЫДАТЬ ЗНАЧОК ────────────────────────────────────────────────────────────
 async function grantAchievement(userId, achievementId) {
     const { data } = await supabase
-        .from('user_achievements')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('achievement_id', achievementId)
-        .maybeSingle();
+        .from('user_achievements').select('id')
+        .eq('user_id', userId).eq('achievement_id', achievementId).maybeSingle();
     if (data) return false;
-
-    const { error } = await supabase
-        .from('user_achievements')
+    const { error } = await supabase.from('user_achievements')
         .insert({ user_id: userId, achievement_id: achievementId });
     if (error) return false;
-
     const ach = ACHIEVEMENTS.find(a => a.id === achievementId);
     if (ach) showToast(`🏅 Новое достижение: ${ach.emoji} ${ach.name}!`);
+    renderMyBadges();
     return true;
 }
 
-// ─── ПРОВЕРКА ДОСТИЖЕНИЙ ──────────────────────────────────────────────────────
 async function checkAchievements(profile) {
     if (!currentUser || !profile) return;
     const uid = currentUser.id;
     const hour = new Date().getHours();
-
     await grantAchievement(uid, 'first_login');
-    if (hour < 8)  await grantAchievement(uid, 'early_bird');
+    if (hour < 8)   await grantAchievement(uid, 'early_bird');
     if (hour >= 23) await grantAchievement(uid, 'night_owl');
-    if (profile.login_streak >= 3) await grantAchievement(uid, 'streak3');
+    if ((profile.login_streak || 0) >= 3) await grantAchievement(uid, 'streak3');
     if ((profile.total_study_minutes || 0) >= 600) await grantAchievement(uid, 'studyhero');
-
     if (profile.study_start) {
         const mins = (new Date() - new Date(profile.study_start)) / 60000;
         if (mins >= 120) await grantAchievement(uid, 'marathon');
     }
-
-    const { count: msgCount } = await supabase
-        .from('messages').select('id', { count: 'exact', head: true }).eq('user_id', uid);
-    if ((msgCount || 0) >= 20) await grantAchievement(uid, 'activist');
-    if ((msgCount || 0) >= 50) await grantAchievement(uid, 'chatterbox');
-
-    await renderMyBadges();
+    const { count } = await supabase.from('messages')
+        .select('id', { count: 'exact', head: true }).eq('user_id', uid);
+    if ((count || 0) >= 20) await grantAchievement(uid, 'activist');
+    if ((count || 0) >= 50) await grantAchievement(uid, 'chatterbox');
 }
 
-// ─── МОИ ЗНАЧКИ ───────────────────────────────────────────────────────────────
 async function renderMyBadges() {
     if (!currentUser) return;
-    const { data } = await supabase
-        .from('user_achievements').select('achievement_id').eq('user_id', currentUser.id);
+    const { data } = await supabase.from('user_achievements')
+        .select('achievement_id').eq('user_id', currentUser.id);
     const container = document.getElementById('myBadges');
     if (!data?.length) { container.innerHTML = ''; return; }
     container.innerHTML = data.map(row => {
@@ -195,7 +172,6 @@ async function renderMyBadges() {
     }).join('');
 }
 
-// ─── ФОРМАТИРОВАНИЕ ВРЕМЕНИ ───────────────────────────────────────────────────
 function getStudyDuration(startTime) {
     if (!startTime) return "";
     const diff = Math.floor((new Date() - new Date(startTime)) / 1000);
@@ -212,41 +188,56 @@ window.signIn = async () => {
     });
 };
 
-async function signOut() {
+window.signOut = async () => {
+    // Останавливаем все интервалы
+    clearInterval(presenceInterval);
+    clearInterval(groupInterval);
+    clearInterval(achInterval);
+    if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+    appInitialized = false;
+    currentUser = null;
     await supabase.auth.signOut();
-    // Чистим URL от # и перезагружаем
-    window.location.href = window.location.origin + window.location.pathname;
-}
+    // Чистим хранилище и редиректим без #
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.replace(window.location.origin + window.location.pathname);
+};
 
 // ─── СТРИК ────────────────────────────────────────────────────────────────────
-async function updateLoginStreak() {
-    const uid = currentUser.id;
+async function updateLoginStreak(uid) {
     const today = new Date().toISOString().slice(0, 10);
-    const { data: profile } = await supabase
-        .from('profiles').select('last_login_date, login_streak').eq('id', uid).maybeSingle();
-    if (!profile || profile.last_login_date === today) return;
-
+    const { data: p } = await supabase.from('profiles')
+        .select('last_login_date, login_streak').eq('id', uid).maybeSingle();
+    if (!p || p.last_login_date === today) return;
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    const yStr = yesterday.toISOString().slice(0, 10);
-    const streak = (profile.last_login_date === yStr) ? (profile.login_streak || 0) + 1 : 1;
-
+    const streak = (p.last_login_date === yesterday.toISOString().slice(0,10))
+        ? (p.login_streak || 0) + 1 : 1;
     await supabase.from('profiles').update({ last_login_date: today, login_streak: streak }).eq('id', uid);
 }
 
-// ─── ИНИЦИАЛИЗАЦИЯ ПРОФИЛЯ ────────────────────────────────────────────────────
-async function ensureProfile() {
-    const uid = currentUser.id;
-    const username = currentUser.user_metadata?.full_name || currentUser.email;
-
-    // upsert: создаст если нет, ничего не сломает если есть
-    await supabase.from('profiles').upsert({
-        id: uid,
-        username: username,
-        status: '🏠 Дома',
-        color: '#6c757d',
-        last_seen: new Date().toISOString()
-    }, { onConflict: 'id', ignoreDuplicates: true });
+// ─── ПРОФИЛЬ: создать если нет ────────────────────────────────────────────────
+async function ensureProfile(user) {
+    const { data: existing } = await supabase.from('profiles')
+        .select('id').eq('id', user.id).maybeSingle();
+    if (!existing) {
+        await supabase.from('profiles').insert({
+            id: user.id,
+            username: user.user_metadata?.full_name || user.email,
+            status: '🏠 Дома',
+            color: '#6c757d',
+            last_seen: new Date().toISOString(),
+            total_study_minutes: 0,
+            login_streak: 0,
+            last_login_date: new Date().toISOString().slice(0,10)
+        });
+    } else {
+        // Обновляем только имя и last_seen
+        await supabase.from('profiles').update({
+            username: user.user_metadata?.full_name || user.email,
+            last_seen: new Date().toISOString()
+        }).eq('id', user.id);
+    }
 }
 
 // ─── СТАТУСЫ ──────────────────────────────────────────────────────────────────
@@ -255,27 +246,26 @@ window.changeStatus = async (text, color) => {
     const isStudying = text.includes("Учусь");
 
     if (!isStudying) {
-        const { data: prev } = await supabase
-            .from('profiles').select('study_start, total_study_minutes').eq('id', currentUser.id).maybeSingle();
+        const { data: prev } = await supabase.from('profiles')
+            .select('study_start, total_study_minutes').eq('id', currentUser.id).maybeSingle();
         if (prev?.study_start) {
             const addedMins = Math.floor((new Date() - new Date(prev.study_start)) / 60000);
-            const total = (prev.total_study_minutes || 0) + addedMins;
-            await supabase.from('profiles').update({ total_study_minutes: total }).eq('id', currentUser.id);
+            await supabase.from('profiles').update({
+                total_study_minutes: (prev.total_study_minutes || 0) + addedMins
+            }).eq('id', currentUser.id);
         }
     }
 
-    await supabase.from('profiles').upsert({
-        id: currentUser.id,
-        username: currentUser.user_metadata?.full_name || currentUser.email,
+    await supabase.from('profiles').update({
         status: text,
         color: color,
         study_start: isStudying ? new Date().toISOString() : null,
         last_seen: new Date().toISOString()
-    });
+    }).eq('id', currentUser.id);
 
     fetchGroup();
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
-    checkAchievements(profile);
+    const { data: p } = await supabase.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+    checkAchievements(p);
 };
 
 // ─── ЧАТ ─────────────────────────────────────────────────────────────────────
@@ -289,12 +279,13 @@ window.sendMessage = async () => {
         user_id: currentUser.id
     });
     input.value = '';
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
-    checkAchievements(profile);
+    const { data: p } = await supabase.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+    checkAchievements(p);
 };
 
 async function fetchMessages() {
-    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true }).limit(50);
+    const { data } = await supabase.from('messages').select('*')
+        .order('created_at', { ascending: true }).limit(50);
     if (!data) return;
     const chatBox = document.getElementById('chatBox');
     chatBox.innerHTML = data.map(msg =>
@@ -305,8 +296,8 @@ async function fetchMessages() {
 
 // ─── РЕЙТИНГ ─────────────────────────────────────────────────────────────────
 async function fetchRating() {
-    const { data } = await supabase
-        .from('profiles').select('username, total_study_minutes, login_streak')
+    const { data } = await supabase.from('profiles')
+        .select('username, total_study_minutes, login_streak')
         .order('total_study_minutes', { ascending: false }).limit(20);
     const list = document.getElementById('ratingList');
     if (!data?.length) {
@@ -318,11 +309,10 @@ async function fetchRating() {
         const h = Math.floor((user.total_study_minutes || 0) / 60);
         const m = (user.total_study_minutes || 0) % 60;
         const icon = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
-        return `
-        <div class="rank-item">
-            <div class="rank-num ${medals[i]||''}">${icon || '#'+(i+1)}</div>
+        return `<div class="rank-item">
+            <div class="rank-num ${medals[i]||''}">${icon||'#'+(i+1)}</div>
             <div style="flex:1;min-width:0;">
-                <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${user.username}</div>
+                <div style="font-weight:600;font-size:14px;">${user.username}</div>
                 <div style="font-size:12px;color:#888;">🔥 стрик: ${user.login_streak||0} дн.</div>
             </div>
             <div class="rank-score">⏱ ${h}ч ${m}м</div>
@@ -334,35 +324,24 @@ async function fetchRating() {
 async function fetchGroup() {
     const { data } = await supabase.from('profiles').select('*').order('last_seen', { ascending: false });
     if (!data) return;
-
     const { data: allAch } = await supabase.from('user_achievements').select('user_id, achievement_id');
     const now = new Date();
     const list = document.getElementById('groupList');
-
-    if (!data.length) {
-        list.innerHTML = '<p style="color:#aaa;font-size:13px;">Никого нет 👻</p>';
-        return;
-    }
-
+    if (!data.length) { list.innerHTML = '<p style="color:#aaa;font-size:13px;">Никого нет 👻</p>'; return; }
     list.innerHTML = data.map(user => {
         const isOnline = (now - new Date(user.last_seen)) < 45000;
         const studyInfo = (user.status?.includes("Учусь") && user.study_start)
             ? `<div style="font-size:11px;color:#28a745;margin-top:2px;">${getStudyDuration(user.study_start)}</div>` : "";
-
-        const userAch = (allAch || [])
-            .filter(a => a.user_id === user.id)
-            .map(a => {
-                const ach = ACHIEVEMENTS.find(x => x.id === a.achievement_id);
-                return ach ? `<span class="badge" title="${ach.desc}">${ach.emoji}</span>` : '';
-            }).join('');
-
-        return `
-        <div class="user-item">
+        const userAch = (allAch||[]).filter(a => a.user_id === user.id).map(a => {
+            const ach = ACHIEVEMENTS.find(x => x.id === a.achievement_id);
+            return ach ? `<span class="badge" title="${ach.desc}">${ach.emoji}</span>` : '';
+        }).join('');
+        return `<div class="user-item">
             <div class="status-dot" style="background:${user.color||'#ccc'};box-shadow:${isOnline?'0 0 8px '+user.color:'none'}"></div>
             <div style="flex-grow:1;min-width:0;">
                 <div style="display:flex;align-items:center;gap:8px;">
                     <strong style="font-size:14px;">${user.username}</strong>
-                    <span>${isOnline ? '🟢' : '⚪'}</span>
+                    <span>${isOnline?'🟢':'⚪'}</span>
                 </div>
                 <div style="font-size:13px;color:#666;">${user.status||'Дома'}</div>
                 ${studyInfo}
@@ -370,76 +349,76 @@ async function fetchGroup() {
             </div>
         </div>`;
     }).join('');
-
     if (activeTab === 'rating') fetchRating();
 }
 
 // ─── ТАБЫ ─────────────────────────────────────────────────────────────────────
 window.switchTab = (tab) => {
     activeTab = tab;
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.textContent.includes(tab === 'monitor' ? 'Монитор' : 'Рейтинг'));
-    });
+    document.getElementById('tabBtnMonitor').classList.toggle('active', tab === 'monitor');
+    document.getElementById('tabBtnRating').classList.toggle('active', tab === 'rating');
     document.getElementById('tab-monitor').classList.toggle('active', tab === 'monitor');
     document.getElementById('tab-rating').classList.toggle('active', tab === 'rating');
     if (tab === 'rating') fetchRating();
 };
 
-// ─── ПРИСУТСТВИЕ ──────────────────────────────────────────────────────────────
 async function updatePresence() {
     if (!currentUser) return;
     await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', currentUser.id);
 }
 
-// ─── ПОКАЗАТЬ/СКРЫТЬ БЛОКИ ────────────────────────────────────────────────────
-function showApp() {
-    document.getElementById('loadingScreen').classList.add('hidden');
+// ─── ЗАПУСК ───────────────────────────────────────────────────────────────────
+async function initApp(user) {
+    if (appInitialized) return; // ← НЕ ИНИЦИАЛИЗИРОВАТЬ ДВАЖДЫ
+    appInitialized = true;
+    currentUser = user;
+
     document.getElementById('authBlock').classList.add('hidden');
     document.getElementById('profileBlock').classList.remove('hidden');
     document.getElementById('chatCard').classList.remove('hidden');
+    document.getElementById('userName').textContent = user.user_metadata?.full_name || user.email;
+
+    await ensureProfile(user);
+    await updateLoginStreak(user.id);
+
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+    await checkAchievements(profile);
+
+    fetchGroup();
+    fetchMessages();
+    renderMyBadges();
+
+    // Realtime — один раз, с уникальным именем канала
+    realtimeChannel = supabase.channel('chat_' + Date.now());
+    realtimeChannel.on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'messages'
+    }, fetchMessages).subscribe();
+
+    presenceInterval = setInterval(updatePresence, 10000);
+    groupInterval    = setInterval(fetchGroup, 5000);
+    achInterval      = setInterval(async () => {
+        const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+        checkAchievements(p);
+    }, 120000);
 }
 
-function showAuth() {
-    document.getElementById('loadingScreen').classList.add('hidden');
+// Сначала проверяем текущую сессию напрямую
+const { data: { session } } = await supabase.auth.getSession();
+if (session?.user) {
+    await initApp(session.user);
+} else {
     document.getElementById('authBlock').classList.remove('hidden');
-    document.getElementById('profileBlock').classList.add('hidden');
-    document.getElementById('chatCard').classList.add('hidden');
 }
 
-// ─── ЗАПУСК ───────────────────────────────────────────────────────────────────
+// Слушаем только новые входы (не повторную инициализацию)
 supabase.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
-        currentUser = session.user;
-        showApp();
-        document.getElementById('userName').textContent = currentUser.user_metadata?.full_name || currentUser.email;
-
-        // Кнопка выйти
-        document.getElementById('signOutBtn').addEventListener('click', signOut);
-
-        await ensureProfile();
-        await updateLoginStreak();
-
-        const { data: profile } = await supabase.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
-        await checkAchievements(profile);
-
-        fetchGroup();
-        fetchMessages();
-        renderMyBadges();
-
-        supabase.channel('messages_realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, fetchMessages)
-            .subscribe();
-
-        setInterval(updatePresence, 10000);
-        setInterval(fetchGroup, 5000);
-        setInterval(async () => {
-            const { data: p } = await supabase.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
-            checkAchievements(p);
-        }, 120000);
-
-    } else {
-        currentUser = null;
-        showAuth();
+    if (event === 'SIGNED_IN' && session?.user && !appInitialized) {
+        await initApp(session.user);
+    }
+    if (event === 'SIGNED_OUT') {
+        document.getElementById('authBlock').classList.remove('hidden');
+        document.getElementById('profileBlock').classList.add('hidden');
+        document.getElementById('chatCard').classList.add('hidden');
     }
 });
 
