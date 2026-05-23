@@ -223,4 +223,259 @@
                 const totalSec = currentSessionSec + (baseMinutes * 60);
                 const diffMin = Math.floor(currentSessionSec / 60);
 
-                const h = Math.floor(totalSec / 36
+                const h = Math.floor(totalSec / 3600);
+                const m = Math.floor((totalSec % 3600) / 60);
+                const s = totalSec % 60;
+                document.getElementById('studyTimerDisplay').innerText = `📚 Учусь: ${h}ч ${m}м ${s}с`;
+
+                if (diffMin > lastMinuteChecked) {
+                    lastMinuteChecked = diffMin;
+                    const currentMinutes = baseMinutes + diffMin;
+                    
+                    await supabase.from('profiles').update({
+                        total_study_minutes: currentMinutes,
+                        last_seen: new Date().toISOString()
+                    }).eq('id', currentUser.id);
+
+                    if (currentMinutes >= 1) await awardAchievement('first_step');
+                    if (diffMin >= 120) await awardAchievement('marathon');
+                    if (currentMinutes >= 600) await awardAchievement('legend');
+                }
+            }, 1000);
+        }
+
+        // Функция отправки пинга (реакции) другу
+        window.sendPing = async (receiverId, emoji) => {
+            if (!currentUser) return;
+            const senderName = currentUser.user_metadata.full_name || currentUser.email;
+            
+            await supabase.from('pings').insert({
+                sender_id: currentUser.id,
+                sender_name: senderName,
+                receiver_id: receiverId,
+                emoji: emoji
+            });
+        };
+
+        // Логика Чата
+        window.sendMessage = async () => {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text || !currentUser) return;
+
+            await supabase.from('messages').insert({
+                user_id: currentUser.id,
+                username: currentUser.user_metadata.full_name || currentUser.email,
+                text: text
+            });
+            input.value = '';
+            loadMessages();
+        };
+
+        async function loadMessages() {
+            const { data: messages } = await supabase.from('messages').select('*').order('created_at', { ascending: true }).limit(50);
+            if (!messages) return;
+
+            const box = document.getElementById('chatBox');
+            box.innerHTML = messages.map(m => `
+                <div class="chat-msg">
+                    <div class="chat-meta">${m.username}</div>
+                    <div class="chat-text">${m.text}</div>
+                </div>
+            `).join('');
+            box.scrollTop = box.scrollHeight;
+        }
+
+        async function awardAchievement(achId) {
+            if (!currentUser) return;
+            const alreadyHas = myBadges.some(b => b.achievement_id === achId);
+            if (alreadyHas) return;
+
+            await supabase.from('user_achievements').insert({
+                user_id: currentUser.id,
+                achievement_id: achId,
+                earned_at: new Date().toISOString()
+            });
+            await loadBadges();
+            renderAchievements();
+        }
+
+        async function loadBadges() {
+            const { data } = await supabase.from('user_achievements').select('*');
+            if (data) myBadges = data;
+        }
+
+        async function loadData() {
+            const { data: profiles } = await supabase.from('profiles').select('*');
+            if (!profiles) return;
+            allProfiles = profiles;
+
+            myProfile = profiles.find(p => p.id === currentUser?.id);
+            
+            if (myProfile && !myProfile.status?.includes('Учусь')) {
+                if (studyInterval) clearInterval(studyInterval);
+                studyInterval = null;
+                document.getElementById('studyTimerDisplay').innerText = "⏱ Не в учебе";
+            } else if (myProfile?.study_start && !studyInterval) {
+                startLocalTimer(myProfile.study_start);
+                document.querySelectorAll('.btn-status').forEach(b => b.classList.remove('active'));
+                const btn = document.getElementById('status-study');
+                if (btn) btn.classList.add('active');
+            } else if (myProfile && !studyInterval) {
+                const totalMinutes = myProfile.total_study_minutes || 0;
+                const h = Math.floor(totalMinutes / 60);
+                const m = totalMinutes % 60;
+                document.getElementById('studyTimerDisplay').innerText = `⏱ Всего накоплено: ${h}ч ${m}м`;
+            }
+
+            renderUsers();
+            renderRating();
+            renderAchievements();
+        }
+
+        function renderUsers() {
+            const container = document.getElementById('content-users');
+            const now = new Date();
+            const sorted = [...allProfiles].sort((a,b) => new Date(b.last_seen) - new Date(a.last_seen));
+
+            container.innerHTML = sorted.map(user => {
+                const isOnline = (now - new Date(user.last_seen)) < 45000;
+                const firstLetter = user.username ? user.username.charAt(0).toUpperCase() : '?';
+                const isMe = user.id === currentUser?.id;
+                
+                // Проверяем, есть ли активная реакция для данного пользователя
+                const activePing = activePings[user.id];
+                const pingBubbleHTML = activePing 
+                    ? `<div class="ping-bubble">👋 от ${activePing.sender_name}: ${activePing.emoji}</div>` 
+                    : '';
+
+                // Кнопки реакций отображаются только для ДРУГИХ пользователей
+                const actionsHTML = !isMe ? `
+                    <div class="ping-actions">
+                        <button class="btn-ping" onclick="sendPing('${user.id}', '👋')">👋</button>
+                        <button class="btn-ping" onclick="sendPing('${user.id}', '🔥')">🔥</button>
+                        <button class="btn-ping" onclick="sendPing('${user.id}', '💻')">💻</button>
+                    </div>
+                ` : '';
+
+                return `
+                    <div class="user-row" id="user-row-${user.id}">
+                        <div class="avatar">${firstLetter}</div>
+                        <div class="user-info">
+                            <div class="user-name">${user.username || 'Аноним'} ${isOnline ? '🟢' : '⚪'}</div>
+                            <div class="user-status-text">${user.status || 'Офлайн'}</div>
+                        </div>
+                        ${pingBubbleHTML}
+                        ${actionsHTML}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderRating() {
+            const container = document.getElementById('content-rating');
+            const leaders = allProfiles.filter(user => (user.total_study_minutes || 0) > 0);
+            leaders.sort((a, b) => (b.total_study_minutes || 0) - (a.total_study_minutes || 0));
+
+            if (leaders.length === 0) {
+                container.innerHTML = `<div style="text-align:center; padding:20px; color:#858585;">Никто еще не провел за учебой больше минуты 📚</div>`;
+                return;
+            }
+
+            container.innerHTML = leaders.map((user, index) => {
+                const h = Math.floor(user.total_study_minutes / 60);
+                const m = user.total_study_minutes % 60;
+                const timeText = h > 0 ? `${h}ч ${m}м` : `${m} мин`;
+
+                return `
+                    <div class="user-row">
+                        <div class="rank-num">#${index + 1}</div>
+                        <div class="user-info">
+                            <div class="user-name">${user.username || 'Аноним'}</div>
+                        </div>
+                        <div class="time-badge">${timeText}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderAchievements() {
+            const container = document.getElementById('content-achievements');
+            const myEarnedIds = myBadges.filter(b => b.user_id === currentUser?.id).map(b => b.achievement_id);
+
+            container.innerHTML = SYSTEM_ACHIEVEMENTS.map(ach => {
+                const isLocked = !myEarnedIds.includes(ach.id);
+                return `
+                    <div class="ach-card ${isLocked ? 'locked' : ''}">
+                        <div class="ach-title">${ach.title}</div>
+                        <div class="ach-desc">${ach.desc}</div>
+                        <div class="ach-type type-${ach.type}">${ach.type}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function initApp() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) { handleUserSession(session.user); }
+
+            supabase.auth.onAuthStateChange((event, session) => {
+                if (session?.user) { handleUserSession(session.user); } 
+                else {
+                    currentUser = null;
+                    document.getElementById('authBlock').classList.remove('hidden');
+                    document.getElementById('profileBlock').classList.add('hidden');
+                    document.getElementById('chatCard').classList.add('hidden');
+                }
+            });
+        }
+
+        async function handleUserSession(user) {
+            currentUser = user;
+            document.getElementById('authBlock').classList.add('hidden');
+            document.getElementById('profileBlock').classList.remove('hidden');
+            document.getElementById('chatCard').classList.remove('hidden');
+            document.getElementById('myUserName').innerText = user.user_metadata.full_name || user.email;
+            
+            await loadBadges();
+            await loadData();
+            await loadMessages();
+
+            // Подписка на обновление профилей
+            supabase.channel('profiles_changed').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+                loadData();
+            }).subscribe();
+
+            // Подписка на новые сообщения в чате (Realtime)
+            supabase.channel('messages_changed').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
+                loadMessages();
+            }).subscribe();
+
+            // Новая Realtime подписка на таблицу pings
+            supabase.channel('pings_changed').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pings' }, (payload) => {
+                const newPing = payload.new;
+                
+                // Нас интересуют пинги, где получатель — ТЕКУЩИЙ пользователь
+                if (newPing.receiver_id === currentUser.id) {
+                    // Сохраняем информацию об активном пинге
+                    activePings[currentUser.id] = {
+                        sender_name: newPing.sender_name,
+                        emoji: newPing.emoji
+                    };
+                    
+                    // Перерисовываем список, чтобы показать плашку
+                    renderUsers();
+
+                    // Ровно через 30 секунд удаляем плашку
+                    setTimeout(() => {
+                        delete activePings[currentUser.id];
+                        renderUsers();
+                    }, 30000);
+                }
+            }).subscribe();
+        }
+
+        initApp();
+    </script>
+</body>
+</html>
