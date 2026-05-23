@@ -159,6 +159,7 @@
             } else {
                 updateData.study_start = null;
                 if(studyInterval) clearInterval(studyInterval);
+                studyInterval = null;
                 document.getElementById('studyTimerDisplay').innerText = "⏱ Не в учебе";
             }
 
@@ -173,6 +174,13 @@
             let lastMinuteChecked = 0;
 
             studyInterval = setInterval(async () => {
+                if (!myProfile || !myProfile.status || !myProfile.status.includes('Учусь')) {
+                    clearInterval(studyInterval);
+                    studyInterval = null;
+                    document.getElementById('studyTimerDisplay').innerText = "⏱ Не в учебе";
+                    return;
+                }
+
                 const diffMs = new Date() - start;
                 const diffSec = Math.floor(diffMs / 1000);
                 const diffMin = Math.floor(diffMs / 60000);
@@ -225,10 +233,16 @@
 
             myProfile = profiles.find(p => p.id === currentUser?.id);
             
-            if (myProfile?.study_start && !studyInterval) {
+            // Если статус в БД НЕ "Учусь" — принудительно гасим любые таймеры при загрузке
+            if (myProfile && !myProfile.status?.includes('Учусь')) {
+                if (studyInterval) clearInterval(studyInterval);
+                studyInterval = null;
+                document.getElementById('studyTimerDisplay').innerText = "⏱ Не в учебе";
+            } else if (myProfile?.study_start && !studyInterval) {
                 startLocalTimer(myProfile.study_start);
                 document.querySelectorAll('.btn-status').forEach(b => b.classList.remove('active'));
-                document.getElementById('status-study').classList.add('active');
+                const btn = document.getElementById('status-study');
+                if (btn) btn.classList.add('active');
             }
 
             renderUsers();
