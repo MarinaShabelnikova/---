@@ -171,6 +171,8 @@
             if(studyInterval) clearInterval(studyInterval);
             
             const start = new Date(startTimeISO);
+            // Вычисляем, сколько секунд уже было накоплено в минутах ранее
+            const baseMinutes = myProfile?.total_study_minutes || 0;
             let lastMinuteChecked = 0;
 
             studyInterval = setInterval(async () => {
@@ -181,19 +183,20 @@
                     return;
                 }
 
-                const diffMs = new Date() - start;
-                const diffSec = Math.floor(diffMs / 1000);
-                const diffMin = Math.floor(diffMs / 60000);
+                // Текущие секунды сессии + сохраненные ранее минуты, переведенные в секунды
+                const currentSessionSec = Math.floor((new Date() - start) / 1000);
+                const totalSec = currentSessionSec + (baseMinutes * 60);
+                const diffMin = Math.floor(currentSessionSec / 60);
 
-                const h = Math.floor(diffSec / 3600);
-                const m = Math.floor((diffSec % 3600) / 60);
-                const s = diffSec % 60;
+                const h = Math.floor(totalSec / 3600);
+                const m = Math.floor((totalSec % 3600) / 60);
+                const s = totalSec % 60;
                 document.getElementById('studyTimerDisplay').innerText = `📚 Учусь: ${h}ч ${m}м ${s}с`;
 
                 if (diffMin > lastMinuteChecked) {
                     lastMinuteChecked = diffMin;
                     
-                    const currentMinutes = (myProfile?.total_study_minutes || 0) + 1;
+                    const currentMinutes = baseMinutes + diffMin;
                     
                     await supabase.from('profiles').update({
                         total_study_minutes: currentMinutes,
@@ -233,7 +236,6 @@
 
             myProfile = profiles.find(p => p.id === currentUser?.id);
             
-            // Если статус в БД НЕ "Учусь" — принудительно гасим любые таймеры при загрузке
             if (myProfile && !myProfile.status?.includes('Учусь')) {
                 if (studyInterval) clearInterval(studyInterval);
                 studyInterval = null;
@@ -243,6 +245,12 @@
                 document.querySelectorAll('.btn-status').forEach(b => b.classList.remove('active'));
                 const btn = document.getElementById('status-study');
                 if (btn) btn.classList.add('active');
+            } else if (myProfile && !studyInterval) {
+                // Если мы не в режиме учёбы, отображаем общее накопленное время в неактивном состоянии
+                const totalMinutes = myProfile.total_study_minutes || 0;
+                const h = Math.floor(totalMinutes / 60);
+                const m = totalMinutes % 60;
+                document.getElementById('studyTimerDisplay').innerText = `⏱ Всего накоплено: ${h}ч ${m}м`;
             }
 
             renderUsers();
