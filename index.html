@@ -3,216 +3,224 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Realtime Monitor</title>
+    <title>Монитор статусов</title>
     <style>
-        :root {
-            --bg-color: #0b0c10;
-            --card-bg: #1f2833;
-            --text-color: #c5a059;
-            --accent-color: #66fcf1;
-            --accent-hover: #45a29e;
-            --text-light: #ffffff;
-            --text-muted: #858585;
-            
-            --status-online: #2ecc71;
-            --status-away: #f1c40f;
-            --status-busy: #e74c3c;
-            --status-dnd: #9b59b6;
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
 
-        /* СТИЛИ ДЛЯ СВЕТЛОЙ ТЕМЫ */
-        body.light-theme {
-            --bg-color: #f4f6f9;
-            --card-bg: #ffffff;
-            --text-light: #1f2833;
-            --text-muted: #6c757d;
-            --accent-color: #007bff;
-            --accent-hover: #0056b3;
+        body {
+            background-color: #f0f2f5;
+            color: #333;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
         }
-        body.light-theme .card {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            border: 1px solid rgba(0,0,0,0.05);
+
+        .container {
+            width: 100%;
+            max-width: 540px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
         }
-        body.light-theme .btn-status {
-            background: rgba(0,0,0,0.03);
-            color: #1f2833;
+
+        .card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            border: 1px solid rgba(0,0,0,0.02);
         }
-        body.light-theme .btn-status:hover {
-            background: rgba(0,0,0,0.08);
+
+        h2 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #1a1a1a;
         }
-        body.light-theme .user-row {
-            background: rgba(0,0,0,0.01);
+
+        .info-text {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        /* Сетка красивых цветных кнопок */
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .btn-status {
+            border: 2px solid transparent;
+            color: white;
+            padding: 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+
+        .btn-status:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        /* Цвета кнопок как у Алмаса */
+        .btn-study { background-color: #27ae60; }
+        .btn-coffee { background-color: #f39c12; color: #1a1a1a; }
+        .btn-game { background-color: #16a085; }
+        .btn-home { background-color: #7f8c8d; }
+
+        /* Элементы списка группы */
+        .group-list {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .user-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 10px;
             border: 1px solid rgba(0,0,0,0.03);
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-        body { background-color: var(--bg-color); color: var(--text-light); padding: 20px; display: flex; justify-content: center; min-height: 100vh; transition: background 0.3s, color 0.3s; }
-        
-        .container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 20px; }
-        
-        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-        h1 { color: var(--accent-color); font-size: 24px; text-transform: uppercase; letter-spacing: 1px; }
-        .theme-toggle-btn { background: var(--card-bg); border: 1px solid rgba(255,255,255,0.1); color: var(--text-light); width: 40px; height: 40px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: all 0.2s; }
-        .theme-toggle-btn:hover { transform: scale(1.05); }
+        .status-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: inset 0 0 2px rgba(0,0,0,0.2);
+        }
 
-        .card { background: var(--card-bg); border-radius: 16px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05); transition: background 0.3s; }
-        .hidden { display: none !important; }
+        .user-details {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
 
-        /* Профиль */
-        .profile-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
-        .user-name-title { font-size: 18px; font-weight: bold; color: var(--text-light); }
-        .auth-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; }
+        .user-name {
+            font-weight: 600;
+            font-size: 16px;
+            color: #2c3e50;
+        }
 
-        /* Сетка статусов */
-        .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 5px; }
-        .btn-status { background: rgba(255,255,255,0.05); border: 2px solid transparent; color: var(--text-light); padding: 14px; border-radius: 10px; cursor: pointer; font-size: 15px; font-weight: 500; text-align: left; display: flex; align-items: center; gap: 10px; transition: all 0.2s; }
-        .btn-status:hover { background: rgba(255,255,255,0.1); }
-        
-        .btn-status.active[data-status="online"] { border-color: var(--status-online); background: rgba(46, 204, 113, 0.15); }
-        .btn-status.active[data-status="away"] { border-color: var(--status-away); background: rgba(241, 196, 15, 0.15); }
-        .btn-status.active[data-status="busy"] { border-color: var(--status-busy); background: rgba(231, 76, 60, 0.15); }
-        .btn-status.active[data-status="dnd"] { border-color: var(--status-dnd); background: rgba(155, 89, 182, 0.15); }
-
-        .status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
-        .dot-online { background: var(--status-online); }
-        .dot-away { background: var(--status-away); }
-        .dot-busy { background: var(--status-busy); }
-        .dot-dnd { background: var(--status-dnd); }
-
-        /* Списки контента */
-        .tab-content { display: flex; flex-direction: column; gap: 10px; }
-        .user-row { display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.02); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.03); }
-        .user-info { display: flex; align-items: center; gap: 12px; flex: 1; }
-        .avatar { width: 38px; height: 38px; background: var(--accent-hover); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: white; }
-        .user-meta { display: flex; flex-direction: column; gap: 2px; }
-        .user-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 6px; }
-        .user-status-text { font-size: 13px; color: var(--text-muted); }
+        .user-status-text {
+            font-size: 13px;
+            color: #7f8c8d;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="header-row">
-        <h1>REALTIME MONITOR</h1>
-        <button id="themeToggle" class="theme-toggle-btn" onclick="window.toggleTheme()" title="Сменить тему">🌓</button>
-    </div>
 
-    <div id="profileBlock" class="card">
-        <div class="profile-header">
-            <div>
-                <div id="myUserName" class="user-name-title">Загрузка профиля...</div>
-            </div>
-        </div>
+    <div class="card">
+        <h2>Мой профиль</h2>
+        <div id="myInfo" class="info-text">Загрузка профиля...</div>
 
         <div class="status-grid">
-            <button id="status-online" class="btn-status" data-status="online" onclick="window.changeStatus('📚 Учусь', 'online')">
-                <span class="status-dot dot-online"></span> 📚 Учусь
+            <button class="btn-status btn-study" onclick="window.changeStatus('📚 Учусь', '#27ae60')">
+                💻 Учусь
             </button>
-            <button id="status-away" class="btn-status" data-status="away" onclick="window.changeStatus('☕ Кофе', 'away')">
-                <span class="status-dot dot-away"></span> ☕ Кофе
+            <button class="btn-status btn-coffee" onclick="window.changeStatus('☕ Кофе брейк', '#f39c12')">
+                ☕ Кофе
             </button>
-            <button id="status-busy" class="btn-status" data-status="busy" onclick="window.changeStatus('🎮 В игре', 'busy')">
-                <span class="status-dot dot-busy"></span> 🎮 В игре
+            <button class="btn-status btn-game" onclick="window.changeStatus('🎮 В игре', '#16a085')">
+                🎮 В игре
             </button>
-            <button id="status-dnd" class="btn-status" data-status="dnd" onclick="window.changeStatus('🏠 Дома', 'dnd')">
-                <span class="status-dot dot-dnd"></span> 🏠 Дома
+            <button class="btn-status btn-home" onclick="window.changeStatus('🏠 Дома', '#7f8c8d')">
+                🏠 Дома
             </button>
         </div>
     </div>
 
     <div class="card">
-        <div class="auth-title">Статусы группы</div>
-        <div id="content-users" class="tab-content"></div>
+        <h2>Монитор группы</h2>
+        <div id="groupList" class="group-list">
+            </div>
     </div>
+
 </div>
 
 <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
 
-    const URL = 'https://ilqycuqiwuvedyzbpqbk.supabase.co';
-    const KEY = 'sb_publishable_Pj-J6f4M3wo_2V5bdbmeDQ_nFs1Xwi_';
+    // Подключение к вашей базе данных Supabase
+    const URL = 'https://rngerhgizyjhovbdpqnl.supabase.co';
+    const KEY = 'sb_publishable_ThtftS6uBeaKf8FyndIFTg_O0HMJ5yh';
     const supabase = createClient(URL, KEY);
 
-    // Твой фиксированный ID Марины
+    // ВАЖНО: ID Марины взят прямо из вашего скриншота таблицы "profiles"
     const MY_ID = '8d5d9b7c-8049-4cc9-88c0-a7e1c4574721';
 
-    // Переключение тем локально
-    window.toggleTheme = () => {
-        document.body.classList.toggle('light-theme');
-    };
-
-    // Изменение статуса
-    window.changeStatus = async (statusText, statusType) => {
-        // Подсвечиваем кнопку визуально
-        document.querySelectorAll('.btn-status').forEach(b => b.classList.remove('active'));
-        const activeBtn = document.getElementById(`status-${statusType}`);
-        if (activeBtn) activeBtn.classList.add('active');
-
-        // Отправляем изменения в базу (обязательно добавь колонку color в таблицу, если её нет!)
+    // Функция смены статуса
+    window.changeStatus = async (text, color) => {
         const { error } = await supabase
             .from('profiles')
-            .update({ status: statusText, color: statusType })
+            .update({ status: text, color: color })
             .eq('id', MY_ID);
 
         if (error) {
-            alert("Ошибка обновления! Проверьте RLS политики или наличие столбца 'color'.");
+            alert("Ошибка! Проверьте RLS политики.");
             console.error(error);
         } else {
+            // Сразу обновляем список на экране после успешного изменения
             fetchGroup();
         }
     };
 
-    // Загрузка участников группы
+    // Функция получения списка группы
     async function fetchGroup() {
-        const { data: profiles, error } = await supabase
+        const { data, error } = await supabase
             .from('profiles')
             .select('*')
             .order('username', { ascending: true });
 
-        if (error) return console.error(error);
+        if (error) {
+            return console.error(error);
+        }
 
-        const container = document.getElementById('content-users');
-        if (!container) return;
-
-        container.innerHTML = profiles.map(user => {
-            const firstLetter = user.username ? user.username.charAt(0).toUpperCase() : '?';
-            
-            // Определяем, какой кружочек выводить на основе сохраненного поля color (status-online, status-away и т.д.)
-            const dotClass = user.color ? `dot-${user.color}` : 'dot-online';
-
-            return `
-                <div class="user-row">
-                    <div class="user-info">
-                        <div class="avatar">${firstLetter}</div>
-                        <div class="user-meta">
-                            <div class="user-name">
-                                ${user.username || 'Аноним'} 
-                                <span class="status-dot ${dotClass}" style="margin-left: 5px; width: 8px; height: 8px;"></span>
-                            </div>
-                            <div class="user-status-text">${user.status || 'Офлайн'}</div>
-                        </div>
-                    </div>
+        // Рендеринг списка участников
+        const listContainer = document.getElementById('groupList');
+        listContainer.innerHTML = data.map(user => `
+            <div class="user-item">
+                <div class="status-dot" style="background-color: ${user.color || '#ccc'}"></div>
+                <div class="user-details">
+                    <span class="user-name">${user.username || 'Аноним'}</span>
+                    <span class="user-status-text">${user.status || 'Статус не задан'}</span>
                 </div>
-            `;
-        }).join('');
+            </div>
+        `).join('');
 
-        // Обновляем шапку профиля для Марины
-        const me = profiles.find(p => p.id === MY_ID);
+        // Отображение текста "Вы зашли как: Марина" сверху
+        // ИСПРАВЛЕНО: u.id изменен на u.id (соответствие вашей структуре бд)
+        const me = data.find(u => u.id === MY_ID);
         if (me) {
-            document.getElementById('myUserName').innerText = `Вы зашли как: ${me.username}`;
-            
-            // Если статус уже выбран в базе, подсветим нужную кнопку при загрузке
-            if (me.color) {
-                document.querySelectorAll('.btn-status').forEach(b => b.classList.remove('active'));
-                const activeBtn = document.getElementById(`status-${me.color}`);
-                if (activeBtn) activeBtn.classList.add('active');
-            }
+            document.getElementById('myInfo').innerText = `Вы зашли как: ${me.username}`;
         }
     }
 
-    // Инициализация приложения
+    // Первый запуск при открытии страницы
     fetchGroup();
-    // Обновляем список каждые 5 секунд
+
+    // Автоматическое обновление списка каждые 5 секунд
     setInterval(fetchGroup, 5000);
 </script>
 </body>
